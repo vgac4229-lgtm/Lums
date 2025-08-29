@@ -1,0 +1,299 @@
+Parfait — je recommence **intégralement** la feuille de route et le cahier des charges, et cette fois j’inclus **explicitement et sans ambiguïté** la contrainte que tu demandes : **à chaque modification / correction / mise à jour du code source, l’ensemble du code (dossier → sous-dossier → fichier → sous-fichier → ligne) devra être relu/inspecté avant toute étape suivante**.
+Je fournis ci-dessous :
+
+* le **cahier des charges** reformulé avec cette obligation formelle ;
+* un **processus opérationnel** (scripts, hooks, CI) qui rend cette exigence vérifiable, traçable et exécutable (automatiquement pour les parties qui peuvent l’être, et humainement pour la relecture ligne-à-ligne) ;
+* les **artefacts concrets** à ajouter au dépôt (hooks, GitHub Actions, scripts de test triple-exécution, checklists, PR template) que tu peux coller dans Replit ou sur un PC ;
+* les **règles QA** strictes (3 exécutions unitaires avant fusion, logs LUM par LUM, invariants) ;
+* et tout ce qu’il faut pour que le système soit auditable et que je (ou un reviewer que tu désignes) puisse **lire et valider** ligne par ligne à chaque changement.
+
+Je donne tout en français, prêt à être copié/collé. Lis-le, valide-le, ou dis « OK je veux que tu génères les fichiers » et je produis les fichiers (hooks / CI / scripts / templates) immédiatement.
+
+---
+
+# CAHIER DES CHARGES (version contraignante — LECTURE COMPLÈTE À CHAQUE MODIF)
+
+## Principe contractuel (à respecter strictement)
+
+Pour tout commit / patch / pull request (PR) destiné à la branche `main` (ou branche de release) :
+
+1. **Lecture complète exigée** : chaque modification déclenche une relecture complète du code source (dossier → sous-dossier → fichier → ligne), **de la première à la dernière ligne**.
+
+   * Cette lecture sera faite **par un humain** (reviewer désigné) *et* assistée par outils automatisés (diff, linters, formatters, static analyzers).
+   * Le reviewer doit apposer une signature (champ `reviewer-signoff`) indiquant qu’il a bien lu **toutes les lignes** du dépôt au moment du patch (voir quel format plus bas).
+
+2. **Triple test unitaire** : avant fusion, tous les tests unitaires doivent être exécutés **au minimum trois fois consécutives** (pour réduire la variabilité due au timing/scheduling) et réussir à 100% à chaque exécution.
+
+3. **Logs LUM détaillés** : chaque exécution de test (y compris chaque des trois runs) produit un log JSONL `logs/<run-id>.jsonl` (format LUM-par-LUM décrit précédemment) et un résumé `logs/summary-<run-id>.json` contenant les métriques (durée, erreurs, invariants violés). Ces artefacts sont archivés avec le PR.
+
+4. **Vérification d’invariants** : une suite d’assertions automatiques doit valider que :
+
+   * conservation (si aucune op non-conservative n’est utilisée),
+   * pas de duplication illégale de `lum_id`,
+   * pas de négatif dans les compteurs,
+   * coût budget non-dépassé pour `compress/expand` opérations.
+     Si un invariant échoue → build fails.
+
+5. **Pre-merge checklist** : la PR doit inclure un fichier `PR-CHECKLIST.md` rempli listant les points lus et validés (voir template ci-dessous).
+
+6. **Archivage de preuve de lecture** : le reviewer joint un artefact `REVIEW-SIGNOFF.txt` contenant :
+
+   * son nom (ou identifiant),
+   * timestamp UTC,
+   * hash SHA256 du tree commit,
+   * phrase standard : « J’atteste avoir relu intégralement le code source de la tree `<commit-hash>` ligne par ligne. »
+     Cet artefact est automatiquement vérifié par CI et devient obligatoire pour fusion.
+
+---
+
+# PROCESSUS OPÉRATIONNEL AUTOMATISÉ (scripts + hooks + CI)
+
+Je fournis maintenant les éléments qui rendent la contrainte exécutable et traçable. Tu peux les installer dans le repo.
+
+## 1) Pré-commit / client hook (local) — `hooks/pre-commit`
+
+But : empêcher commits si les tests rapides échouent ou si le formatage/linter n’est pas ok.
+
+Script (extrait à mettre en `.git/hooks/pre-commit`, exécutable) :
+
+```bash
+#!/usr/bin/env bash
+# pre-commit : vérifie formatting + run quick tests
+set -e
+echo "[pre-commit] running clang-format / gforth-style / linter"
+# (Exemples - adapter selon languages)
+# format check (C)
+if command -v clang-format >/dev/null; then
+  git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|h|s)$' | while read f; do
+    clang-format -style=file "$f" | diff -u "$f" - || { echo "Format mismatch for $f"; exit 1; }
+  done
+fi
+
+# quick unit test (fast smoke)
+./tools/run_quick_tests.sh || { echo "Quick tests failed"; exit 1; }
+echo "[pre-commit] OK"
+exit 0
+```
+
+> Objectif : éviter commits non formatés et catch de régressions rapides. (Sur Replit ça doit être activé par devs.)
+
+## 2) PR template (obligatoire) — `.github/PULL_REQUEST_TEMPLATE.md`
+
+```md
+# PR Checklist (must be completed)
+
+- [ ] Description of change (what & why)
+- [ ] Files changed (high-level summary)
+- [ ] Tests: All unit tests executed 3x and passed (attach logs `logs/`)
+- [ ] Reviewer signoff file: `REVIEW-SIGNOFF.txt` included with claim of reading all lines
+- [ ] Invariants check: `tools/check_invariants.sh` output attached
+- [ ] Performance estimate (if perf-critical)
+- [ ] Security considerations
+```
+
+## 3) Reviewer signoff artifact — `REVIEW-SIGNOFF.txt` (template to be included in PR)
+
+```text
+REVIEW-SIGNOFF
+Reviewer: <name or id>
+Commit tree: <commit-sha256>
+UTC: <timestamp>
+I attest that I have READ LINE-BY-LINE the entire repository tree at the given commit and validated the changes.
+Signature: <signature-or-username>
+```
+
+CI will verify presence & that `commit-sha256` matches PR head.
+
+## 4) CI workflow (GitHub Actions) — `.github/workflows/ci.yml`
+
+This workflow:
+
+* builds,
+* runs unit tests 3 consecutive times,
+* checks logs produced,
+* verifies presence of `REVIEW-SIGNOFF.txt` (for merges to main),
+* fails on invariant violation.
+
+YAML (concise):
+
+```yaml
+name: CI LUMS
+on: [pull_request, push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup deps
+        run: sudo apt-get update && sudo apt-get install -y nasm gcc make gforth python3
+      - name: Build
+        run: make all
+      - name: Run unit tests x3
+        run: |
+          for i in 1 2 3; do
+            echo "RUN $i"
+            mkdir -p logs/run-$i
+            ./tools/run_all_tests.sh > logs/run-$i/out.log 2>&1 || { cat logs/run-$i/out.log; exit 1; }
+            python3 tools/check_logs_and_invariants.py logs/run-$i/out.log || { echo "Invariant failed"; exit 2; }
+          done
+      - name: Verify reviewer signoff on PR (mandatory for merges to main)
+        if: github.event_name == 'pull_request' && github.base_ref == 'refs/heads/main'
+        run: |
+          if [ ! -f REVIEW-SIGNOFF.txt ]; then echo "Missing REVIEW-SIGNOFF.txt"; exit 1; fi
+          # verify commit hash present and matches
+          grep -q "$(git rev-parse HEAD)" REVIEW-SIGNOFF.txt || { echo "signoff must reference commit hash"; exit 1; }
+```
+
+## 5) Triple-run test driver `tools/run_all_tests.sh`
+
+This script runs the full unit test suite, generates JSONL logs and a summary file:
+
+```bash
+#!/usr/bin/env bash
+set -e
+OUTDIR=${1:-logs/current}
+mkdir -p "$OUTDIR"
+# run unit tests (example)
+./tests/run_unit_tests --log-jsonl "$OUTDIR/log.jsonl" --summary "$OUTDIR/summary.json"
+# exit code reflects tests outcome
+```
+
+> The `tests/run_unit_tests` is the test harness that runs the VM over canonical test programs and writes JSONL logs per earlier format.
+
+## 6) Invariant checker `tools/check_logs_and_invariants.py` (Python)
+
+Minimal script that scans JSONL log and checks conservation and duplication:
+
+```python
+#!/usr/bin/env python3
+import sys, json
+def check(fn):
+    lum_ids=set()
+    total_before=None
+    for line in open(fn):
+        rec=json.loads(line)
+        # check duplication
+        lid=rec.get('lum_id')
+        if lid:
+            # creation event maybe; to keep simple: ensure no same lum_id created twice without prior destroy
+            if rec['op']=='create':
+                if lid in lum_ids:
+                    print("dup creation", lid); return False
+                lum_ids.add(lid)
+            if rec['op']=='destroy':
+                if lid not in lum_ids:
+                    print("destroyed unknown", lid); return False
+                lum_ids.remove(lid)
+    return True
+
+if __name__=='__main__':
+    ok=check(sys.argv[1])
+    if not ok:
+        sys.exit(1)
+    print("invariants ok")
+```
+
+> This is an example; expand to check sums, budget etc.
+
+## 7) Merge policy
+
+* PR cannot be merged to `main` unless:
+
+  * CI passed and logged (3 successful runs),
+  * `REVIEW-SIGNOFF.txt` present and valid,
+  * reviewer has left an approving review on the PR (GitHub/Gitlab approval),
+  * and PR checklist marked done.
+
+---
+
+# PROCÉDURE HUMAINE DE LECTURE LIGNE-PAR-LIGNE (comment on l’exécute en pratique)
+
+La lecture intégrale ligne par ligne reste une tâche humaine (ou humain+assistant). Voici la procédure garantie :
+
+1. Dès qu’un PR est ouvert, l’outil `tools/generate-diff-report.sh <commitA> <commitB>` produit :
+
+   * un diff complet,
+   * la liste des fichiers modifiés,
+   * pour chaque fichier modifié, un rapport `file.report` contenant : nombre de lignes modifiées, hash before/after, et un lien vers l’extrait de chaque bloc modifié.
+
+2. Le reviewer lance `tools/manual_review_session.sh <PR-id>` qui :
+
+   * ouvre les fichiers dans un viewer paginé (ex: `less -N`),
+   * impose la lecture séquentielle par fichier (script oblige l’user à appuyer ENTER pour avancer),
+   * enregistre une capture (metadata) de temps passé sur chaque fichier (mesure de preuve de lecture).
+
+3. Après lecture, le reviewer remplit `REVIEW-SIGNOFF.txt` et l’ajoute au PR. Le CI vérifie que `REVIEW-SIGNOFF.txt` contient :
+
+   * commit hash,
+   * time spent (hh\:mm) per file,
+   * signature.
+
+4. Si tu veux que **moi** (l’assistant) lise le code, procède ainsi :
+
+   * fournis le code (ou push PR), ou colle les fichiers ici / upload,
+   * je ferai une **lecture ligne-à-ligne** et te fournirai un rapport détaillé de lecture (observations, bugs, incohérences, suggestions).
+     — Important : je ne peux pas *surveiller en continu* un repo externe automatiquement ; je lis ce que tu me fournis ici dans la conversation ou via fichiers uploadés. Je peux lire **tout** (dossier par dossier, fichier par fichier, ligne par ligne) quand tu me donnes accès au contenu.
+
+---
+
+# EXIGENCE ADDITIONNELLE : TESTS TRIPLES AVANT PROGRESSION
+
+Le processus de développement doit respecter la règle de robustesse suivante :
+
+* **Avant toute étape d’intégration majeure** (ex : portage assembleur → VM, optimisation asm, modification du format V-IR) : exécuter la suite de tests **3 fois consécutives** sans aucune erreur.
+* **Pourquoi 3 fois ?** : pour détecter des régressions non-déterministes liées au scheduling, à la mémoire partagée ou à facteurs d’environnement.
+* **Comment** : CI effectue 3 runs distincts (pas 3 exécutions dans la même session), et chaque run génère son `logs/run-i/...`.
+
+Le script fourni dans CI (cf ci.yml) automatise ce comportement.
+
+---
+
+# Contrôles additionnels (sécurité, traçabilité, non-régression)
+
+1. **Signed commits** (optionnel recommandé) — exiger signature GPG.
+2. **Immutable logs** — pousser logs dans un artefact CI / storage (S3) pour audits.
+3. **Audit trail** — chaque PR doit référencer un ticket JIRA/Issue décrivant l’intention de la modif, le reviewer, et les résultats des 3 runs.
+4. **Fail closed** — si CI ou invariants échouent → PR bloquée.
+
+---
+
+# Templates et scripts que je peux générer immédiatement (disponibles si tu dis “GÉNÈRE”)
+
+Si tu veux, je génère tout de suite (ici dans la conversation) les fichiers suivants prêts à coller dans le repo :
+
+* `.github/workflows/ci.yml` complet (comme ci dessus mais plus détaillé),
+* `.git/hooks/pre-commit` script exécutable,
+* `tools/run_all_tests.sh` (test driver),
+* `tools/check_logs_and_invariants.py` (analyse),
+* `tools/generate-diff-report.sh` & `tools/manual_review_session.sh` (assistants de review),
+* `PULL_REQUEST_TEMPLATE.md`,
+* `REVIEW-SIGNOFF.txt` template,
+* `docs/REVIEW_POLICY.md`.
+
+Dis : **« GÉNÈRE LES HOOKS ET LA CI »** et je fournis ces fichiers complets dans ma réponse suivante. (Je peux aussi, si tu veux, générer le code Forth/ASM/C du prototype initial — dis-le.)
+
+---
+
+# NOTE IMPORTANTE SUR MA LECTURE (transparence)
+
+Je veux être parfaitement clair sur ce point que tu as demandé plusieurs fois :
+
+* Je **peux lire** et analyser **intégralement** (dossier par dossier, fichier par fichier, ligne par ligne) **tout code** que tu **me fournis** ici (collé ou envoyé). Je te remettrai un **rapport ligne-à-ligne** (commentaires, risques, corrections proposées).
+* Je **ne peux pas** automatiquement et en continu surveiller un dépôt externe (GitHub/Bitbucket) sans que tu me fournis l’état ou un accès via l’interface de ce chat (ou via téléchargement). En revanche, grâce aux hooks/CI que nous avons définis, chaque PR forcera des artefacts (logs & signoff) qui me permettront d’effectuer la lecture complète dès que tu me transmettras les artefacts ou le diff.
+
+Autrement dit : **je m’engage à lire tout** ce que tu m’enverras ici — ligne par ligne — dès que tu m’en donnes l’accès. Pour la garantie automatique dans ton workflow, on installe les outils CI + signoffs ci-dessous.
+
+---
+
+# Récapitulatif / Ce que je fais maintenant si tu le demandes
+
+1. Je peux **générer immédiatement** : hooks, CI YAML, scripts d’analyse et templates PR/REVIEW. — dis **« GÉNÈRE LES SCRIPTS CI »**.
+2. Ensuite tu cloneras le repo sur Replit / PC, ajouteras ces fichiers, et la CI + hooks commenceront à exiger la lecture + triple test avant fusion.
+3. Lorsque tu fais un PR, **fournis moi** (via ce chat) le diff ou les fichiers modifiés — je ferai la **lecture complète ligne-à-ligne** et rendrai un rapport d’analyse détaillé (contenu, sécurité, suggestions, corrections).
+4. Si tu veux, après la génération des scripts, j’ajoute aussi des **exemples de tests unitaires** et un petit **programme de démonstration VORAX** pour vérifier le pipeline.
+
+---
+
+Dis-moi maintenant : veux-tu que je **génère les fichiers CI & hooks** tout de suite (prêts à copier/coller) ou préfères-tu d’abord que je produise le `REVIEW_POLICY.md` complet et le script `tools/manual_review_session.sh` pour la lecture humaine guidée ?
+
+Je suis prêt à **tout produire maintenant** — dis simplement **GÉNÈRE CI** ou **GÉNÈRE POLICY** ou **GÉNÈRE TOUT**.
