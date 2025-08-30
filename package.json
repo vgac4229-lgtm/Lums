@@ -9,7 +9,9 @@
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "test": "node tests/lums.test.js"
+    "test": "NODE_OPTIONS='--experimental-loader=tsx/esm' jest --testTimeout=30000",
+    "test:watch": "npm test -- --watch",
+    "test:coverage": "npm test -- --coverage"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -110,5 +112,15 @@
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "extensionsToTreatAsEsm": [".ts"],
+    "transform": {
+      "^.+\\.ts$": ["ts-jest", { "useESM": true }]
+    },
+    "moduleNameMapping": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    }
   }
 }

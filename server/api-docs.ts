@@ -119,3 +119,23 @@ const options = {
 
 export const swaggerSpec = swaggerJsdoc(options);
 export { swaggerUi };
+
+// Options pour Swagger UI
+export const swaggerOptions = {
+  explorer: true,
+  swaggerOptions: {
+    persistAuthorization: true,
+    displayRequestDuration: true,
+    docExpansion: 'none',
+    filter: true,
+    showExtensions: true,
+    showCommonExtensions: true,
+    tryItOutEnabled: true
+  },
+  customCss: `
+    .swagger-ui .topbar { display: none }
+    .swagger-ui .info .title { color: #2c3e50; }
+    .swagger-ui .scheme-container { background: #f8f9fa; }
+  `,
+  customSiteTitle: "LUMS/VORAX API Documentation"
+};

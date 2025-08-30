@@ -1,5 +1,5 @@
-
-# LUMS/VORAX Build System
+The Makefile has been updated to include security audit and fix capabilities, enhancing the CI pipeline.
+<replit_final_file># LUMS/VORAX Build System
 # Complete Makefile with all targets as specified in reports
 
 CC = gcc
@@ -93,13 +93,30 @@ clean:
 	rm -f logs/*.jsonl
 	@echo "✅ Clean completed"
 
+# Security and dependency check
+audit:
+	@echo "🔍 Running security audit..."
+	npm audit
+	@echo "✅ Security audit completed"
+
+audit-fix:
+	@echo "🔧 Fixing security vulnerabilities..."
+	npm audit fix
+	@echo "✅ Security vulnerabilities fixed"
+
+security-check:
+	@echo "🛡️ Comprehensive security check..."
+	npm audit --audit-level moderate
+	@echo "✅ Security check completed"
+
 # Complete CI pipeline
-ci: clean lint test-all
+ci: clean lint test-all audit-fix security-check
 	@echo "🎯 CI Summary:"
 	@echo "   ✅ Clean: PASSED"
 	@echo "   ✅ Lint: PASSED"  
 	@echo "   ✅ Tests: PASSED"
 	@echo "   ✅ Build: PASSED"
+	@echo "   ✅ Security: PASSED"
 
 # Help
 help:
@@ -116,6 +133,9 @@ help:
 	@echo "  lint       - Lint C code"
 	@echo "  install    - Install system-wide"
 	@echo "  clean      - Clean build artifacts"
+	@echo "  audit      - Run security audit"
+	@echo "  audit-fix  - Fix security vulnerabilities"
+	@echo "  security-check - Perform moderate security check"
 	@echo "  ci         - Complete CI pipeline"
 	@echo "  help       - Show this help"
 
@@ -128,4 +148,4 @@ info:
 	@echo "  Objects: $(OBJECTS)"
 	@echo "  Library: $(LUMS_LIB)"
 
-.PHONY: all shared test test-js test-all debug release lint install clean ci help info
+.PHONY: all shared test test-js test-all debug release lint install clean audit audit-fix security-check ci help info
