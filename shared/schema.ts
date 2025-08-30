@@ -1,75 +1,105 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, jsonb, timestamp } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const lumSessions = pgTable("lum_sessions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  inputBits: text("input_bits").notNull(),
-  outputLums: jsonb("output_lums").notNull(),
-  operations: jsonb("operations").notNull().default('[]'),
-  voraxCode: text("vorax_code"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const lumOperations = pgTable("lum_operations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  sessionId: varchar("session_id").references(() => lumSessions.id),
-  operationType: text("operation_type").notNull(), // fusion, split, cycle, flow
-  inputLums: jsonb("input_lums").notNull(),
-  outputLums: jsonb("output_lums").notNull(),
-  parameters: jsonb("parameters").notNull().default('{}'),
-  timestamp: timestamp("timestamp").defaultNow(),
-});
-
-export const insertLumSessionSchema = createInsertSchema(lumSessions).pick({
-  name: true,
-  inputBits: true,
-  outputLums: true,
-  operations: true,
-  voraxCode: true,
-});
-
-export const insertLumOperationSchema = createInsertSchema(lumOperations).pick({
-  sessionId: true,
-  operationType: true,
-  inputLums: true,
-  outputLums: true,
-  parameters: true,
-});
-
-export type InsertLumSession = z.infer<typeof insertLumSessionSchema>;
-export type LumSession = typeof lumSessions.$inferSelect;
-export type InsertLumOperation = z.infer<typeof insertLumOperationSchema>;
-export type LumOperation = typeof lumOperations.$inferSelect;
-
-// Core LUMS types
+// Core LUM and Zone schemas
 export const lumSchema = z.object({
+  id: z.string(),
   presence: z.number().min(0).max(1),
   structureType: z.enum(['linear', 'group', 'node', 'cycle']),
-  spatialData: z.record(z.any()).optional(),
   position: z.object({
     x: z.number(),
     y: z.number(),
-  }).optional(),
+  }),
 });
 
-export const lumGroupSchema = z.object({
+export const zoneSchema = z.object({
   id: z.string(),
-  lums: z.array(lumSchema),
-  groupType: z.enum(['linear', 'cluster', 'node', 'memory']),
-  connections: z.array(z.string()).optional(),
+  name: z.string(),
+  lumCount: z.number().min(0),
+  bounds: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  }),
 });
 
-export const voraxOperationSchema = z.object({
-  symbol: z.enum(['⧉', '⇅', '⟲', '→']),
-  name: z.enum(['fusion', 'split', 'cycle', 'flow']),
-  sourceGroups: z.array(z.string()),
-  targetGroups: z.array(z.string()),
+export const memorySlotSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  lumCount: z.number().min(0),
+  timestamp: z.number(),
+});
+
+export const logEntrySchema = z.object({
+  level: z.enum(['info', 'success', 'warning', 'error']),
+  message: z.string(),
+  timestamp: z.string(),
+  data: z.record(z.any()).optional(),
+});
+
+export const executionStepSchema = z.object({
+  tick: z.number(),
+  operation: z.string(),
+  status: z.enum(['pending', 'executing', 'completed', 'failed']),
+  params: z.record(z.any()).optional(),
+});
+
+export const executionMetricsSchema = z.object({
+  executionTime: z.number(),
+  memoryUsage: z.number(),
+  lumOperations: z.number(),
+  ticksExecuted: z.number(),
+  totalTicks: z.number(),
+  violations: z.number(),
+  efficiency: z.number(),
+  conservationValid: z.boolean(),
+  raceConditions: z.number(),
+});
+
+export const voraxEngineStateSchema = z.object({
+  zones: z.array(zoneSchema),
+  memory: z.array(memorySlotSchema),
+  logs: z.array(logEntrySchema),
+  executionSteps: z.array(executionStepSchema),
+  metrics: executionMetricsSchema,
+  currentTick: z.number(),
+  totalTicks: z.number(),
+  isExecuting: z.boolean(),
+});
+
+export const executeRequestSchema = z.object({
+  code: z.string(),
+  statements: z.array(z.record(z.any())),
+});
+
+export const operationRequestSchema = z.object({
+  operation: z.string(),
+  sourceZone: z.string().optional(),
+  targetZone: z.string().optional(),
   parameters: z.record(z.any()).optional(),
 });
 
+// Types
 export type LUM = z.infer<typeof lumSchema>;
-export type LUMGroup = z.infer<typeof lumGroupSchema>;
-export type VoraxOperation = z.infer<typeof voraxOperationSchema>;
+export type Zone = z.infer<typeof zoneSchema>;
+export type MemorySlot = z.infer<typeof memorySlotSchema>;
+export type LogEntry = z.infer<typeof logEntrySchema>;
+export type ExecutionStep = z.infer<typeof executionStepSchema>;
+export type ExecutionMetrics = z.infer<typeof executionMetricsSchema>;
+export type VoraxEngineState = z.infer<typeof voraxEngineStateSchema>;
+export type ExecuteRequest = z.infer<typeof executeRequestSchema>;
+export type OperationRequest = z.infer<typeof operationRequestSchema>;
+
+// User schemas for authentication (keeping existing structure)
+export const insertUserSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(6),
+});
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export interface User {
+  id: string;
+  username: string;
+  password: string;
+}

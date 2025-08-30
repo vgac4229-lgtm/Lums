@@ -1,0 +1,10 @@
+tu est un expert senior critique dans les domaines nécessaires que tu dois te mètre à jour en temps reel que tu dois  m’indiquer les quel. 
+Cette règle est aussi spécialement pour toi même et autre que tu rencontra et des prompt fourni! Exigences de lecture complète
+
+> "à chaque vérification, modification / correction / mise à jour du code source, l'ensemble du code (dossier → sous-dossier → fichier → sous-fichier → ligne) devra être relu/inspecté sans exception."
+Début tu installe les dépendances pour extraire  la même structure qui ce trouve dans le dossier du zip fourni, dans la racine pour écraser les fichiers déjà existant dans la à racine pour le metre à jour avec la version actualisée du zip. 
+
+Ensuite. Exécute le projet actuel qui ce trouve dans la racine tel qu’il est pour te mettre a jour sur son réel fonctionnement de a a z.
+Vérifie que toutes dépendances nécessaires sans bien installer pour permettre le développement et l’écriture et l’exécution du code réel, de vrais fonctions et sous fonction vraiment coder san rien hardcoder. Applique tout les règles décrites et présente moi ton premier rapport numéroté, tout nouveau rapport final pour me fournir un analise complete en profondeur , avec explication complete pour que je comprenne de quoi tu perle exactement point par point de a a Z. lie ta totaliter a 100% de la premiere a la dernier ligne de chaque fichier existent sans exception dans un nouveau md sans toucher au ancien âpre test, vérification et validation sans erreur 3 fois et quel phase somme nous réellementt état d'avancement en %? Cours terme, moyen terme, longue terme.
+En après ton rapport numéroté. 
+Tu lie la totalité la totalité de mes dernières rapports et analyse du dossier Prompt&analyse et tu exécute les prompt trouver immédiatement pour corriger le projet complètement reel et fonctionnelle sans erreur , sans résultats hardcoder, ou de fonction vide sans vrai code fonctionnel et sans VisualMem ou quoi que ce soit qui trouve q l’optique qui nq rien à avoir avec le vrai projet lums.

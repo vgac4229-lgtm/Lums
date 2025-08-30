@@ -1,214 +1,326 @@
-import type { VoraxOperation, LUMGroup } from "@shared/schema";
-
-interface ParsedVorax {
-  zones: Record<string, any>;
-  memory: Record<string, any>;
-  operations: VoraxOperation[];
-  errors: string[];
+export interface VoraxToken {
+  type: 'keyword' | 'identifier' | 'operator' | 'literal' | 'symbol';
+  value: string;
+  line: number;
+  column: number;
 }
 
-export function parseVoraxCode(code: string): ParsedVorax {
-  const result: ParsedVorax = {
-    zones: {},
-    memory: {},
-    operations: [],
-    errors: [],
-  };
+export interface VoraxStatement {
+  type: 'zone_declaration' | 'memory_declaration' | 'assignment' | 'operation' | 'assertion';
+  data: any;
+}
 
-  const lines = code.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+export class VoraxParser {
+  private tokens: VoraxToken[] = [];
+  private position = 0;
 
-  for (const line of lines) {
-    try {
-      if (line.startsWith('Zone ')) {
-        parseZoneDeclaration(line, result);
-      } else if (line.startsWith('#')) {
-        parseMemoryDefinition(line, result);
-      } else if (line.includes('⧉') || line.includes('⇅') || line.includes('⟲') || line.includes('→')) {
-        parseOperation(line, result);
-      } else if (line.startsWith('⇾')) {
-        parseFlowInstruction(line, result);
+  parse(code: string): VoraxStatement[] {
+    this.tokens = this.tokenize(code);
+    this.position = 0;
+    
+    const statements: VoraxStatement[] = [];
+    
+    while (!this.isAtEnd()) {
+      const statement = this.parseStatement();
+      if (statement) {
+        statements.push(statement);
       }
-    } catch (error) {
-      result.errors.push(`Error parsing line "${line}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+    
+    return statements;
+  }
+
+  private tokenize(code: string): VoraxToken[] {
+    const tokens: VoraxToken[] = [];
+    const lines = code.split('\n');
+    
+    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+      const line = lines[lineNum];
+      let column = 0;
+      
+      while (column < line.length) {
+        const char = line[column];
+        
+        // Skip whitespace
+        if (/\s/.test(char)) {
+          column++;
+          continue;
+        }
+        
+        // Skip comments
+        if (line.substring(column, column + 2) === '//') {
+          break;
+        }
+        
+        // Parse keywords and identifiers
+        if (/[a-zA-Z_]/.test(char)) {
+          const start = column;
+          while (column < line.length && /[a-zA-Z0-9_]/.test(line[column])) {
+            column++;
+          }
+          const value = line.substring(start, column);
+          const type = this.isKeyword(value) ? 'keyword' : 'identifier';
+          tokens.push({ type, value, line: lineNum, column: start });
+          continue;
+        }
+        
+        // Parse operators and symbols
+        if (this.isOperatorStart(char)) {
+          const start = column;
+          const operator = this.parseOperator(line, column);
+          column += operator.length;
+          tokens.push({ type: 'operator', value: operator, line: lineNum, column: start });
+          continue;
+        }
+        
+        // Parse symbols
+        if (this.isSymbol(char)) {
+          tokens.push({ type: 'symbol', value: char, line: lineNum, column });
+          column++;
+          continue;
+        }
+        
+        column++;
+      }
+    }
+    
+    return tokens;
+  }
+
+  private parseStatement(): VoraxStatement | null {
+    if (this.isAtEnd()) return null;
+    
+    const token = this.peek();
+    
+    switch (token.value) {
+      case 'zone':
+        return this.parseZoneDeclaration();
+      case 'mem':
+        return this.parseMemoryDeclaration();
+      case 'fuse':
+      case 'split':
+      case 'move':
+      case 'store':
+      case 'retrieve':
+      case 'cycle':
+        return this.parseOperation();
+      case 'assert':
+        return this.parseAssertion();
+      default:
+        if (this.peekNext()?.value === ':=') {
+          return this.parseAssignment();
+        }
+        this.advance(); // Skip unknown tokens
+        return null;
     }
   }
 
-  return result;
-}
-
-function parseZoneDeclaration(line: string, result: ParsedVorax): void {
-  // Parse: "Zone A : ⦿(•••)" or "Zone A, B, C;"
-  const zoneMatch = line.match(/Zone\s+([A-Z][^:]*)\s*:\s*(.+)/);
-  if (zoneMatch) {
-    const zoneName = zoneMatch[1].trim();
-    const zoneContent = zoneMatch[2].trim();
+  private parseZoneDeclaration(): VoraxStatement {
+    this.advance(); // consume 'zone'
+    const zones: string[] = [];
     
-    const lumCount = countLumsInExpression(zoneContent);
-    result.zones[zoneName] = {
-      content: zoneContent,
-      lumCount,
-      type: zoneContent.includes('⦿') ? 'cluster' : 'linear',
-    };
-  } else {
-    // Multiple zone declaration: "Zone A, B, C;"
-    const multiZoneMatch = line.match(/Zone\s+([^;]+);?/);
-    if (multiZoneMatch) {
-      const zoneNames = multiZoneMatch[1].split(',').map(name => name.trim());
-      for (const zoneName of zoneNames) {
-        result.zones[zoneName] = {
-          content: '(vide)',
-          lumCount: 0,
-          type: 'linear',
-        };
+    while (!this.isAtEnd() && this.peek().value !== ';') {
+      if (this.peek().type === 'identifier') {
+        zones.push(this.advance().value);
+      } else if (this.peek().value === ',') {
+        this.advance(); // consume comma
+      } else {
+        break;
       }
     }
-  }
-}
-
-function parseMemoryDefinition(line: string, result: ParsedVorax): void {
-  // Parse: "#graine := ⦿(••)"
-  const memMatch = line.match(/#(\w+)\s*:=\s*(.+)/);
-  if (memMatch) {
-    const memName = memMatch[1];
-    const memContent = memMatch[2];
     
-    const lumCount = countLumsInExpression(memContent);
-    result.memory[memName] = {
-      content: memContent,
-      lumCount,
-      type: memContent.includes('⦿') ? 'cluster' : 'linear',
-    };
-  }
-}
-
-function parseOperation(line: string, result: ParsedVorax): void {
-  // Parse operations like: "•• ⧉ ••• → •••••" or "#graine ⧉ • → ⦿(•••)"
-  let operation: VoraxOperation | null = null;
-
-  if (line.includes('⧉')) {
-    operation = {
-      symbol: '⧉',
-      name: 'fusion',
-      sourceGroups: extractSourceGroups(line, '⧉'),
-      targetGroups: extractTargetGroups(line),
-    };
-  } else if (line.includes('⇅')) {
-    const zones = extractZoneCount(line);
-    operation = {
-      symbol: '⇅',
-      name: 'split',
-      sourceGroups: extractSourceGroups(line, '⇅'),
-      targetGroups: extractTargetGroups(line),
-      parameters: { zones },
-    };
-  } else if (line.includes('⟲')) {
-    const modulo = extractModulo(line);
-    operation = {
-      symbol: '⟲',
-      name: 'cycle',
-      sourceGroups: extractSourceGroups(line, '⟲'),
-      targetGroups: extractTargetGroups(line),
-      parameters: { modulo },
-    };
-  } else if (line.includes('→')) {
-    operation = {
-      symbol: '→',
-      name: 'flow',
-      sourceGroups: extractSourceGroups(line, '→'),
-      targetGroups: extractTargetGroups(line),
+    if (this.peek().value === ';') {
+      this.advance(); // consume semicolon
+    }
+    
+    return {
+      type: 'zone_declaration',
+      data: { zones }
     };
   }
 
-  if (operation) {
-    result.operations.push(operation);
+  private parseMemoryDeclaration(): VoraxStatement {
+    this.advance(); // consume 'mem'
+    const buffers: string[] = [];
+    
+    while (!this.isAtEnd() && this.peek().value !== ';') {
+      if (this.peek().type === 'identifier') {
+        buffers.push(this.advance().value);
+      } else if (this.peek().value === ',') {
+        this.advance(); // consume comma
+      } else {
+        break;
+      }
+    }
+    
+    if (this.peek().value === ';') {
+      this.advance(); // consume semicolon
+    }
+    
+    return {
+      type: 'memory_declaration',
+      data: { buffers }
+    };
   }
-}
 
-function parseFlowInstruction(line: string, result: ParsedVorax): void {
-  // Parse: "⇾ Zone A reçoit #graine"
-  // This is more descriptive text, we can track it as metadata
-  result.operations.push({
-    symbol: '→',
-    name: 'flow',
-    sourceGroups: [],
-    targetGroups: [],
-    parameters: { description: line.substring(1).trim() },
-  });
-}
-
-function countLumsInExpression(expr: string): number {
-  // Count • symbols in expressions like "•••" or "⦿(••••)"
-  const matches = expr.match(/•/g);
-  return matches ? matches.length : 0;
-}
-
-function extractSourceGroups(line: string, operatorSymbol: string): string[] {
-  const parts = line.split(operatorSymbol);
-  if (parts.length < 2) return [];
-  
-  const leftPart = parts[0].trim();
-  const groups: string[] = [];
-  
-  // Extract memory references (#name) or LUM patterns (••• or ⦿(•••))
-  const memoryRefs = leftPart.match(/#\w+/g);
-  if (memoryRefs) {
-    groups.push(...memoryRefs);
+  private parseOperation(): VoraxStatement {
+    const operation = this.advance().value;
+    const params: any = {};
+    
+    // Parse operation parameters based on type
+    switch (operation) {
+      case 'fuse':
+        params.zone = this.advance().value;
+        if (this.peek().value === ',') {
+          this.advance(); // consume comma
+          params.lumCount = this.parseLumCount();
+        }
+        break;
+      case 'split':
+        params.source = this.advance().value;
+        if (this.peek().value === '->') {
+          this.advance(); // consume '->'
+          params.targets = this.parseTargetList();
+        }
+        break;
+      // Add other operation parsers...
+    }
+    
+    this.consumeStatementEnd();
+    
+    return {
+      type: 'operation',
+      data: { operation, params }
+    };
   }
-  
-  const lumPatterns = leftPart.match(/[•⦿()]+/g);
-  if (lumPatterns) {
-    groups.push(...lumPatterns);
+
+  private parseAssignment(): VoraxStatement {
+    const variable = this.advance().value;
+    this.advance(); // consume ':='
+    
+    // Parse the right-hand side
+    const value = this.parseExpression();
+    
+    this.consumeStatementEnd();
+    
+    return {
+      type: 'assignment',
+      data: { variable, value }
+    };
   }
-  
-  return groups;
-}
 
-function extractTargetGroups(line: string): string[] {
-  const arrowIndex = line.indexOf('→');
-  if (arrowIndex === -1) return [];
-  
-  const rightPart = line.substring(arrowIndex + 1).trim();
-  const groups: string[] = [];
-  
-  // Extract zone names or LUM patterns
-  const zoneRefs = rightPart.match(/Zone\s+[A-Z]/g);
-  if (zoneRefs) {
-    groups.push(...zoneRefs);
+  private parseAssertion(): VoraxStatement {
+    this.advance(); // consume 'assert'
+    const assertionType = this.advance().value;
+    
+    this.advance(); // consume ':'
+    
+    const condition = this.parseExpression();
+    
+    this.consumeStatementEnd();
+    
+    return {
+      type: 'assertion',
+      data: { assertionType, condition }
+    };
   }
-  
-  const lumPatterns = rightPart.match(/[•⦿()]+/g);
-  if (lumPatterns) {
-    groups.push(...lumPatterns);
+
+  private parseExpression(): any {
+    // Simple expression parser - can be extended
+    const tokens: string[] = [];
+    
+    while (!this.isAtEnd() && this.peek().value !== ';') {
+      tokens.push(this.advance().value);
+    }
+    
+    return tokens.join(' ');
   }
-  
-  return groups;
-}
 
-function extractZoneCount(line: string): number {
-  // Extract number from "⇅ 2" or "⇅ 3 zones"
-  const match = line.match(/⇅\s*(\d+)/);
-  return match ? parseInt(match[1], 10) : 2;
-}
+  private parseLumCount(): number {
+    const token = this.peek();
+    if (token.value.includes('•')) {
+      return token.value.length; // Count bullets
+    }
+    return parseInt(token.value) || 1;
+  }
 
-function extractModulo(line: string): number {
-  // Extract number from "⟲ 3" or "% 3"
-  const match = line.match(/(?:⟲|%)\s*(\d+)/);
-  return match ? parseInt(match[1], 10) : 3;
-}
+  private parseTargetList(): string[] {
+    const targets: string[] = [];
+    
+    if (this.peek().value === '[') {
+      this.advance(); // consume '['
+      
+      while (!this.isAtEnd() && this.peek().value !== ']') {
+        if (this.peek().type === 'identifier') {
+          targets.push(this.advance().value);
+        } else if (this.peek().value === ',') {
+          this.advance(); // consume comma
+        } else {
+          break;
+        }
+      }
+      
+      if (this.peek().value === ']') {
+        this.advance(); // consume ']'
+      }
+    }
+    
+    return targets;
+  }
 
-export function validateVoraxSyntax(code: string): { valid: boolean; errors: string[] } {
-  const parsed = parseVoraxCode(code);
-  return {
-    valid: parsed.errors.length === 0,
-    errors: parsed.errors,
-  };
-}
+  private consumeStatementEnd(): void {
+    if (this.peek().value === ';') {
+      this.advance();
+    }
+  }
 
-export function formatVoraxCode(code: string): string {
-  // Basic formatting for VORAX code
-  return code
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0)
-    .join('\n');
+  private isKeyword(value: string): boolean {
+    const keywords = ['zone', 'mem', 'fuse', 'split', 'move', 'store', 'retrieve', 'cycle', 'assert', 'emit', 'group'];
+    return keywords.includes(value);
+  }
+
+  private isOperatorStart(char: string): boolean {
+    return '+-*/%=<>!&|:'.includes(char);
+  }
+
+  private parseOperator(line: string, start: number): string {
+    const twoCharOps = [':=', '->', '==', '!=', '<=', '>=', '&&', '||', '+='];
+    
+    for (const op of twoCharOps) {
+      if (line.substring(start, start + op.length) === op) {
+        return op;
+      }
+    }
+    
+    return line[start];
+  }
+
+  private isSymbol(char: string): boolean {
+    return '()[]{},.;•'.includes(char);
+  }
+
+  private peek(): VoraxToken {
+    if (this.isAtEnd()) {
+      return { type: 'symbol', value: '', line: 0, column: 0 };
+    }
+    return this.tokens[this.position];
+  }
+
+  private peekNext(): VoraxToken | null {
+    if (this.position + 1 >= this.tokens.length) {
+      return null;
+    }
+    return this.tokens[this.position + 1];
+  }
+
+  private advance(): VoraxToken {
+    if (!this.isAtEnd()) {
+      this.position++;
+    }
+    return this.tokens[this.position - 1];
+  }
+
+  private isAtEnd(): boolean {
+    return this.position >= this.tokens.length;
+  }
 }

@@ -1,162 +1,128 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: hsl(222, 84%, 5%);
-  --foreground: hsl(210, 40%, 96%);
-  --card: hsl(222, 84%, 8%);
-  --card-foreground: hsl(210, 40%, 96%);
-  --popover: hsl(222, 84%, 8%);
-  --popover-foreground: hsl(210, 40%, 96%);
-  --primary: hsl(166, 100%, 42%);
-  --primary-foreground: hsl(222, 84%, 5%);
-  --secondary: hsl(255, 91%, 38%);
-  --secondary-foreground: hsl(210, 40%, 96%);
-  --muted: hsl(217, 32%, 17%);
-  --muted-foreground: hsl(215, 20%, 65%);
-  --accent: hsl(166, 100%, 42%);
-  --accent-foreground: hsl(222, 84%, 5%);
-  --destructive: hsl(0, 84%, 60%);
-  --destructive-foreground: hsl(210, 40%, 96%);
-  --border: hsl(217, 32%, 17%);
-  --input: hsl(217, 32%, 17%);
-  --ring: hsl(166, 100%, 42%);
-  --radius: 0.75rem;
-  --font-sans: "Inter", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
-}
-
-.dark {
-  --background: hsl(222, 84%, 5%);
-  --foreground: hsl(210, 40%, 96%);
-  --card: hsl(222, 84%, 8%);
-  --card-foreground: hsl(210, 40%, 96%);
-  --popover: hsl(222, 84%, 8%);
-  --popover-foreground: hsl(210, 40%, 96%);
-  --primary: hsl(166, 100%, 42%);
-  --primary-foreground: hsl(222, 84%, 5%);
-  --secondary: hsl(255, 91%, 38%);
-  --secondary-foreground: hsl(210, 40%, 96%);
-  --muted: hsl(217, 32%, 17%);
-  --muted-foreground: hsl(215, 20%, 65%);
-  --accent: hsl(166, 100%, 42%);
-  --accent-foreground: hsl(222, 84%, 5%);
-  --destructive: hsl(0, 84%, 60%);
-  --destructive-foreground: hsl(210, 40%, 96%);
-  --border: hsl(217, 32%, 17%);
-  --input: hsl(217, 32%, 17%);
-  --ring: hsl(166, 100%, 42%);
+  --background: hsl(224, 71%, 4%);
+  --foreground: hsl(213, 31%, 91%);
+  --card: hsl(224, 71%, 6%);
+  --card-foreground: hsl(213, 31%, 91%);
+  --popover: hsl(224, 71%, 6%);
+  --popover-foreground: hsl(213, 31%, 91%);
+  --primary: hsl(210, 40%, 50%);
+  --primary-foreground: hsl(222.2, 84%, 4.9%);
+  --secondary: hsl(215, 27%, 17%);
+  --secondary-foreground: hsl(210, 40%, 98%);
+  --muted: hsl(215, 27%, 17%);
+  --muted-foreground: hsl(217.9, 10.6%, 64.9%);
+  --accent: hsl(215, 27%, 17%);
+  --accent-foreground: hsl(210, 40%, 98%);
+  --destructive: hsl(0, 62.8%, 30.6%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --border: hsl(215, 27%, 17%);
+  --input: hsl(215, 27%, 17%);
+  --ring: hsl(216, 12%, 84%);
+  --radius: 0.5rem;
+  --chart-1: hsl(220, 70%, 50%);
+  --chart-2: hsl(160, 60%, 45%);
+  --chart-3: hsl(30, 80%, 55%);
+  --chart-4: hsl(280, 65%, 60%);
+  --chart-5: hsl(340, 75%, 55%);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Code', 'Roboto Mono', monospace;
 }
 
 @layer base {
   * {
     @apply border-border;
   }
-
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground;
   }
 }
 
 @layer components {
+  .resizer {
+    background: hsl(215, 27%, 17%);
+    cursor: col-resize;
+    width: 4px;
+    min-width: 4px;
+    transition: background-color 0.2s;
+  }
+  
+  .resizer:hover {
+    background: hsl(210, 40%, 50%);
+  }
+  
   .lum-dot {
-    @apply inline-block w-3 h-3 rounded-full bg-accent transition-all duration-300 ease-in-out;
-    box-shadow: 0 0 12px hsl(166, 100%, 42%, 0.4);
-    animation: lumPulse 2s ease-in-out infinite;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: hsl(160, 60%, 45%);
+    display: inline-block;
+    margin: 0 1px;
+    animation: pulse 1.5s ease-in-out infinite;
   }
   
-  .lum-dot:hover {
-    @apply scale-110;
-    box-shadow: 0 0 20px hsl(166, 100%, 42%, 0.6);
-    transform: scale(1.1);
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
   
-  .lum-group {
-    @apply inline-flex items-center gap-1 px-3 py-2 bg-card bg-opacity-50 rounded-lg border-2 border-transparent transition-all duration-300;
+  .zone-container {
+    border: 2px solid hsl(215, 27%, 17%);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+    background: hsl(224, 71%, 6%);
+    transition: border-color 0.2s;
   }
   
-  .lum-group:hover {
-    @apply border-primary bg-card;
+  .zone-container:hover {
+    border-color: hsl(210, 40%, 50%);
   }
   
-  .operation-symbol {
-    @apply text-primary text-xl font-medium mx-2;
+  .code-editor {
+    font-family: var(--font-mono);
+    background: hsl(224, 71%, 4%);
+    color: hsl(213, 31%, 91%);
+    border: 1px solid hsl(215, 27%, 17%);
+    border-radius: 6px;
+    padding: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    resize: none;
+    outline: none;
   }
   
-  .transformation-demo {
-    @apply min-h-16 border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-card transition-all duration-300;
+  .code-editor:focus {
+    border-color: hsl(210, 40%, 50%);
+    box-shadow: 0 0 0 2px hsla(210, 40%, 50%, 0.2);
   }
   
-  .transformation-demo:hover {
-    @apply border-primary bg-muted bg-opacity-30;
+  .execution-step {
+    padding: 8px 12px;
+    border-left: 3px solid hsl(215, 27%, 17%);
+    margin: 4px 0;
+    background: hsl(224, 71%, 6%);
+    border-radius: 0 4px 4px 0;
   }
   
-  .code-block {
-    @apply bg-muted border border-border rounded-lg p-4 font-mono text-sm overflow-x-auto;
+  .execution-step.active {
+    border-left-color: hsl(160, 60%, 45%);
+    background: hsla(160, 60%, 45%, 0.1);
   }
   
-  .vorax-syntax {
-    @apply font-mono bg-card border border-border text-accent p-3 rounded text-sm;
+  .log-entry {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 4px 8px;
+    border-bottom: 1px solid hsl(215, 27%, 17%);
   }
   
-  .spatial-grid {
-    background-image: 
-      radial-gradient(circle at 25px 25px, hsl(217, 32%, 17%, 0.3) 2px, transparent 0),
-      radial-gradient(circle at 75px 75px, hsl(217, 32%, 17%, 0.3) 2px, transparent 0);
-    background-size: 100px 100px;
-  }
-  
-  .neural-connection {
-    stroke: var(--accent);
-    stroke-width: 2;
-    fill: none;
-    stroke-dasharray: 5,5;
-    animation: flowData 3s linear infinite;
-  }
-  
-  .fusion-animation {
-    @apply transition-all duration-500 ease-out;
-  }
-  
-  .fusion-animation:hover {
-    @apply scale-105;
-    box-shadow: 0 0 25px hsl(166, 100%, 42%, 0.3);
-  }
-  
-  .transformation-glow {
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
-    box-shadow: 0 0 20px hsl(166, 100%, 42%, 0.3);
-  }
-  
-  .organic-flow {
-    background: radial-gradient(ellipse at center, hsl(166, 100%, 42%, 0.1), transparent);
-  }
-}
-
-@keyframes lumPulse {
-  0%, 100% { 
-    opacity: 0.7; 
-    transform: scale(1); 
-  }
-  50% { 
-    opacity: 1; 
-    transform: scale(1.1); 
-  }
-}
-
-@keyframes flowData {
-  from { 
-    stroke-dashoffset: 10; 
-  }
-  to { 
-    stroke-dashoffset: 0; 
-  }
-}
-
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+  .log-entry.info { color: hsl(213, 31%, 91%); }
+  .log-entry.success { color: hsl(160, 60%, 45%); }
+  .log-entry.warning { color: hsl(30, 80%, 55%); }
+  .log-entry.error { color: hsl(0, 62.8%, 60%); }
 }
