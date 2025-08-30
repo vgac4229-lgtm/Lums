@@ -336,10 +336,10 @@ export class LumsEngine {
 
   private getTotalLumCount(): number {
     let total = 0;
-    for (const zone of this.zones.values()) {
+    for (const zone of Array.from(this.zones.values())) {
       total += zone.lumCount;
     }
-    for (const slot of this.memory.values()) {
+    for (const slot of Array.from(this.memory.values())) {
       total += slot.lumCount;
     }
     return total;

@@ -1,4 +1,7 @@
 
+import { LUMGroup } from "./types/lums";
+import { logger } from "./services/logger";
+
 // V-IR Virtual Machine Implementation - Phase Moyen Terme
 export interface VIRInstruction {
   opcode: VIROpcode;
@@ -83,6 +86,7 @@ export class VIRMachine {
         this.registers[operand3] = {
           id: `fused_${Date.now()}`,
           lums: fusedLums,
+          count: fusedLums.length,
           groupType: 'cluster'
         };
         
@@ -123,4 +127,3 @@ interface InstructionResult {
   error?: string;
 }
 
-export { VIRMachine };
