@@ -7,14 +7,27 @@ import { swaggerUi, swaggerSpec, swaggerOptions } from './api-docs';
 
 const router = express.Router();
 
-// Validation middleware
+// Rate limiting plus stricte
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requêtes par IP
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+    retry_after: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Middleware de validation d'erreurs
 const handleValidationErrors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     logger.log('warn', 'Validation errors', { 
       errors: errors.array(),
       url: req.url,
-      body: req.body
+      body: req.body,
+      op: 'validation_error'
     });
     return res.status(400).json({
       error: 'Validation failed',
@@ -24,7 +37,7 @@ const handleValidationErrors = (req: express.Request, res: express.Response, nex
   next();
 };
 
-// Validation rules
+// Règles de validation strictes
 const validateBitString = [
   body('inputBits')
     .isString()
@@ -97,7 +110,7 @@ const validateVoraxOperation = [
  *             schema:
  *               $ref: '#/components/schemas/ApiError'
  */
-router.post('/convert/bit-to-lum', validateBitString, handleValidationErrors, (req, res) => {
+router.post('/convert/bit-to-lum', apiLimiter, validateBitString, handleValidationErrors, (req, res) => {
   const startTime = process.hrtime.bigint();
   const { inputBits } = req.body;
 
@@ -118,10 +131,11 @@ router.post('/convert/bit-to-lum', validateBitString, handleValidationErrors, (r
     const endTime = process.hrtime.bigint();
     const conversionTimeMs = Number((endTime - startTime) / BigInt(1000000));
 
-    // Log conversion avec détails
+    // Log conversion avec détails complets
     logger.logConversion(inputBits, lums, {
       conversion_time_ms: conversionTimeMs,
-      endpoint: '/convert/bit-to-lum'
+      endpoint: '/convert/bit-to-lum',
+      client_ip: req.ip
     });
 
     res.json({
@@ -130,14 +144,16 @@ router.post('/convert/bit-to-lum', validateBitString, handleValidationErrors, (r
         input_length: inputBits.length,
         output_count: lums.length,
         conversion_time_ms: conversionTimeMs,
-        run_id: logger.runId
+        run_id: logger.runId,
+        conservation_valid: inputBits.length === lums.length
       }
     });
 
   } catch (error) {
     logger.log('error', 'Bit conversion failed', { 
       error: error instanceof Error ? error.message : 'Unknown error',
-      input: inputBits
+      input: inputBits,
+      op: 'conversion_error'
     });
     res.status(500).json({ error: 'Conversion failed' });
   }
@@ -168,29 +184,37 @@ router.post('/convert/bit-to-lum', validateBitString, handleValidationErrors, (r
  *       400:
  *         description: Validation error
  */
-router.post('/convert/lum-to-bit', (req, res) => {
+router.post('/convert/lum-to-bit', apiLimiter, (req, res) => {
   const { lums } = req.body;
 
   try {
+    if (!Array.isArray(lums)) {
+      return res.status(400).json({ error: 'lums must be an array' });
+    }
+
     const resultBits = lums.map((lum: any) => lum.presence.toString()).join('');
     
     logger.log('info', 'LUM to bit conversion', {
       op: 'lum_to_bit_conversion',
       input_count: lums.length,
-      output_length: resultBits.length
+      output_length: resultBits.length,
+      conservation_valid: lums.length === resultBits.length
     });
 
     res.json({
       outputBits: resultBits,
       conversion_stats: {
         input_count: lums.length,
-        output_length: resultBits.length
+        output_length: resultBits.length,
+        conservation_valid: lums.length === resultBits.length,
+        run_id: logger.runId
       }
     });
 
   } catch (error) {
     logger.log('error', 'LUM to bit conversion failed', { 
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      op: 'conversion_error'
     });
     res.status(500).json({ error: 'Conversion failed' });
   }
@@ -228,7 +252,7 @@ router.post('/convert/lum-to-bit', (req, res) => {
  *       400:
  *         description: Validation error
  */
-router.post('/execute/vorax-operation', validateVoraxOperation, handleValidationErrors, (req, res) => {
+router.post('/execute/vorax-operation', apiLimiter, validateVoraxOperation, handleValidationErrors, (req, res) => {
   const { type, groups, parameters = {} } = req.body;
 
   try {
@@ -242,9 +266,16 @@ router.post('/execute/vorax-operation', validateVoraxOperation, handleValidation
         }
         result = {
           id: `fusion-${Date.now()}`,
-          lums: groups.flatMap((group: any) => group.lums),
+          lums: groups.flatMap((group: any) => group.lums.map((lum: any, index: number) => ({
+            ...lum,
+            lum_id: lum.lum_id || `L-${logger.runId}-fused-${index.toString().padStart(6, '0')}`
+          }))),
           groupType: 'cluster',
-          metadata: { operation: 'fusion', timestamp: new Date().toISOString() }
+          metadata: { 
+            operation: 'fusion', 
+            timestamp: new Date().toISOString(),
+            source_groups: groups.length
+          }
         };
         break;
 
@@ -259,13 +290,22 @@ router.post('/execute/vorax-operation', validateVoraxOperation, handleValidation
         
         for (let i = 0; i < zones; i++) {
           const zoneSize = lumsPerZone + (i < remainder ? 1 : 0);
-          const zoneLums = sourceGroup.lums.slice(currentIndex, currentIndex + zoneSize);
+          const zoneLums = sourceGroup.lums.slice(currentIndex, currentIndex + zoneSize)
+            .map((lum: any, index: number) => ({
+              ...lum,
+              lum_id: lum.lum_id || `L-${logger.runId}-zone${i}-${index.toString().padStart(6, '0')}`
+            }));
+          
           result.push({
             id: `split-zone-${i}-${Date.now()}`,
             lums: zoneLums,
             groupType: 'linear',
             zone: `zone_${i}`,
-            metadata: { operation: 'split', zone_index: i }
+            metadata: { 
+              operation: 'split', 
+              zone_index: i,
+              zone_size: zoneSize
+            }
           });
           currentIndex += zoneSize;
         }
@@ -274,11 +314,21 @@ router.post('/execute/vorax-operation', validateVoraxOperation, handleValidation
       case 'cycle':
         const modulo = parameters.modulo || 3;
         const sourceGroup2 = groups[0];
+        const cycledCount = sourceGroup2.lums.length % modulo;
+        
         result = {
           id: `cycle-${Date.now()}`,
-          lums: sourceGroup2.lums.slice(0, sourceGroup2.lums.length % modulo),
+          lums: sourceGroup2.lums.slice(0, cycledCount).map((lum: any, index: number) => ({
+            ...lum,
+            lum_id: lum.lum_id || `L-${logger.runId}-cycle-${index.toString().padStart(6, '0')}`
+          })),
           groupType: 'node',
-          metadata: { operation: 'cycle', modulo }
+          metadata: { 
+            operation: 'cycle', 
+            modulo,
+            original_count: sourceGroup2.lums.length,
+            cycled_count: cycledCount
+          }
         };
         break;
 
@@ -287,8 +337,16 @@ router.post('/execute/vorax-operation', validateVoraxOperation, handleValidation
         result = {
           ...groups[0],
           id: `flow-${Date.now()}`,
+          lums: groups[0].lums.map((lum: any, index: number) => ({
+            ...lum,
+            lum_id: lum.lum_id || `L-${logger.runId}-flow-${index.toString().padStart(6, '0')}`
+          })),
           connections: [targetZone],
-          metadata: { operation: 'flow', target_zone: targetZone }
+          metadata: { 
+            operation: 'flow', 
+            target_zone: targetZone,
+            timestamp: new Date().toISOString()
+          }
         };
         break;
 
@@ -296,14 +354,14 @@ router.post('/execute/vorax-operation', validateVoraxOperation, handleValidation
         return res.status(400).json({ error: `Unknown operation: ${type}` });
     }
 
-    // Vérification conservation pour fusion et split
+    // Vérification conservation pour toutes les opérations sauf cycle
     const resultLums = Array.isArray(result) 
       ? result.reduce((sum, group) => sum + group.lums.length, 0)
       : result.lums.length;
 
     const conservationValid = type === 'cycle' || resultLums === totalInputLums;
 
-    // Log opération avec validation conservation
+    // Log opération avec validation conservation complète
     logger.logLumOperation(
       type,
       'main',
@@ -313,7 +371,8 @@ router.post('/execute/vorax-operation', validateVoraxOperation, handleValidation
       { 
         conservation_valid: conservationValid,
         parameters,
-        operation_type: type
+        operation_type: type,
+        client_ip: req.ip
       }
     );
 
@@ -325,7 +384,8 @@ router.post('/execute/vorax-operation', validateVoraxOperation, handleValidation
         input_lums: totalInputLums,
         output_lums: resultLums,
         conservation_valid: conservationValid,
-        parameters
+        parameters,
+        run_id: logger.runId
       }
     });
 
@@ -333,7 +393,8 @@ router.post('/execute/vorax-operation', validateVoraxOperation, handleValidation
     logger.log('error', 'VORAX operation failed', { 
       error: error instanceof Error ? error.message : 'Unknown error',
       operation: type,
-      groups_count: groups.length
+      groups_count: groups.length,
+      op: 'vorax_operation_error'
     });
     res.status(500).json({ error: 'Operation failed' });
   }
@@ -361,7 +422,7 @@ router.post('/execute/vorax-operation', validateVoraxOperation, handleValidation
  *                 log_count:
  *                   type: integer
  */
-router.post('/logs/save', (req, res) => {
+router.post('/logs/save', apiLimiter, (req, res) => {
   try {
     const filepath = logger.saveToJSONL();
     const stats = logger.getStats();
@@ -370,12 +431,14 @@ router.post('/logs/save', (req, res) => {
       message: 'Logs saved successfully',
       filepath,
       log_count: stats.total_logs,
-      run_id: stats.run_id
+      run_id: stats.run_id,
+      conservation_rate: stats.conservation_stats.conservation_rate
     });
 
   } catch (error) {
     logger.log('error', 'Failed to save logs', { 
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      op: 'logs_save_error'
     });
     res.status(500).json({ error: 'Failed to save logs' });
   }
@@ -402,7 +465,8 @@ router.get('/logs/stats', (req, res) => {
     res.json(stats);
   } catch (error) {
     logger.log('error', 'Failed to get log stats', { 
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      op: 'logs_stats_error'
     });
     res.status(500).json({ error: 'Failed to get statistics' });
   }
@@ -412,7 +476,7 @@ export function registerRoutes(app: express.Application) {
   // Documentation API avec options personnalisées
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerOptions));
 
-  // Routes API
+  // Routes API avec sécurité renforcée
   app.use('/api', router);
 }
 
