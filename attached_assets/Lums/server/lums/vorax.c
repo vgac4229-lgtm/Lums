@@ -479,7 +479,7 @@ void vorax_clear_error(VoraxEngine* engine) {
     }
 }
 
-void vorax_set_error(VoraxEngine* engine, const char* error_msg) {
+static void vorax_set_error(VoraxEngine* engine, const char* error_msg) {
     if (engine && error_msg) {
         strncpy(engine->error_message, error_msg, sizeof(engine->error_message) - 1);
         engine->error_message[sizeof(engine->error_message) - 1] = '\0'; // Ensure null-termination

@@ -1,0 +1,592 @@
+Excellent — je prends tout ce que tu as fourni et je te livre MAINTENANT un **plan A→Z ultra-détaillé, opérationnel, prêt à exécuter sur Replit (ou sur une machine réelle)**, avec **tous** les éléments que tu as demandés : étapes, fichiers, commandes, format de logs « lum par lum », contraintes réelles sur Replit, estimations de latence/CPU/RAM, stratégies de traçabilité, tests, CI, sécurité, et livrables. Je le fais en **français** et sans rien oublier — comme un cahier des charges + manuel d’exécution.
+
+Je couvre :
+
+* choix technique (Forth vs assembleur vs C)
+* comment installer / configurer sur Replit (ou PC)
+* arborescence de projet et contenu exact des fichiers à créer
+* primitives LUM en Forth **et** en assembleur (squelettes copiables)
+* encodeur/décodeur bit↔LUM (C)
+* VM LUM (asm + C) et format bytecode (V-IR)
+* serveur console backend (C, TCP simple sur port 5000)
+* format de log LUM par LUM (JSONL) et horodatage le plus fin possible
+* métriques / monitoring minimal
+* tests unitaires, propriétés d’invariants, fuzzing
+* pipeline bootstrap (assembler → forth → self-hosting)
+* risques, limites Replit, alternatives
+* planning précis + livrables à chaque étape
+
+Je commence.
+
+---
+
+# Résumé rapide (1 phrase)
+
+Tu obtiendras un **système backend complet** (primitives LUM, encodeur/décodeur, VM LUM, compilateur minimal VORAX → V-IR, serveur console streaming) prototype-able sur **Replit** et portable sur PC, avec **traçabilité LUM par LUM** (logs JSONL horodatés), et une route de bootstrap 100% autonome (assembleur → Forth → auto-hébergement).
+
+---
+
+# Contrainte réaliste et point de départ (Replit vs machine réelle)
+
+1. **Replit — ce qu’on peut et ne peut pas faire**
+
+   * ✅ On peut installer et exécuter : `nasm`, `gcc`, `gforth` (si la repl autorise `apt`/package) ; on peut éditer et exécuter assembleur, C et Forth dans le container.
+   * ✅ On peut ouvrir un port HTTP/TCP (port 5000) pour la console web (streaming texte).
+   * ❌ On **n’a pas** d’accès hardware (pas de contrôle des IRQ, pas d’accès Ring 0, pas de bus série direct).
+   * ❌ Les sessions peuvent avoir des timeouts/limitations, CPU partagé et mémoire limitée (Free \~1GB/1 vCPU, payant >).
+   * → **Conclusion pratique** : Replit est parfait pour le **développement logiciel, test & bootstrap fonctionnel** et pour la traçabilité LUM par LUM. Pour la phase “hardware natif” (implémentation FPGA / driver kernel), tu basculeras sur un PC ou une carte cible.
+
+2. **Machine réelle (PC / serveur)**
+
+   * Permet assemblage natif, performances maximales et accès bas-niveau (si tu veux faire du driver ou utiliser FPGA via JTAG).
+   * Recommandé pour la phase finale/perf.
+
+---
+
+# Objectifs concrets du plan (livrables)
+
+1. Environnment Replit prêt (ou PC) avec `nasm`, `gcc`, `gforth`.
+2. `lums-core/` : primitives LUM en Forth (exécutables) + squelettes assembleur.
+3. `bit-bridge/` : encodeur/décodeur C bits ↔ LUM (API `encode_bits_to_lums()` / `decode_lums_to_bits()`).
+4. `vorax-compiler/` : parser minimal VORAX → V-IR (C).
+5. `vorax-vm/` : VM LUM capable d’exécuter V-IR (assembleur + C).
+6. `console-server/` : backend serveur TCP (C) sur port 5000 qui stream les logs JSONL.
+7. Système de logs LUM-par-LUM (JSONL) + outils d’analyse (scripts Python ou C).
+8. Test-suite + property checks (invariants : conservation, pas de duplication sauf via expand autorisé).
+9. Document d’exploitation et planning avec jalons.
+
+---
+
+# Arborescence projet (à créer dès maintenant)
+
+```
+lums-vorax/
+├─ lums-core/
+│  ├─ forth/                # primitives LUM en Forth
+│  │   ├─ lums.fs
+│  │   └─ README.md
+│  └─ asm/                  # primitives LUM en assembleur (x86-64)
+│      ├─ lum_primitives.asm
+│      └─ Makefile
+├─ bit-bridge/
+│  ├─ encoder.c
+│  ├─ decoder.c
+│  └─ Makefile
+├─ vorax-compiler/
+│  ├─ parser.c
+│  ├─ codegen.c
+│  └─ Makefile
+├─ vorax-vm/
+│  ├─ virmacros.h
+│  ├─ vm.c                  # loop principale en C + appels asm
+│  ├─ vm_asm.s              # primitives asm très optimisées (optional)
+│  └─ Makefile
+├─ console-server/
+│  ├─ server.c              # server TCP streaming JSONL
+│  ├─ protocol.md
+│  └─ Makefile
+├─ tools/
+│  ├─ analyze_logs.py
+│  └─ test_suite.sh
+└─ docs/
+   ├─ spec_v_ir.md
+   ├─ spec_vorax_syntax.md
+   └─ plan_bootstrap.md
+```
+
+---
+
+# Format de trace : LOG “LUM-par-LUM” (spécification)
+
+Chaque événement est écrit en JSON newline-delimited (JSONL). Ce format permet d’append en continu, d’analyser par ligne, et d’avoir un horodatage nanoseconde si possible.
+
+Exemple de ligne (champ expliqué après) :
+
+```json
+{"ts_ns":1630000000123456789,"tick":42,"tx_id":"ae3f1","op":"fuse","zone":"A","lum_id":"L-00000123","prev_count":5,"added":2,"post_count":7,"actor":"vm:core","pc":128}
+```
+
+Champs :
+
+* `ts_ns` : timestamp monotonic en nanosecondes (via `clock_gettime(CLOCK_MONOTONIC)`), permet ordre stable indépendamment de l’heure système.
+* `tick` : numéro de tick (cycle logique).
+* `tx_id` : identifiant unique de transaction/op (hex 6 chars).
+* `op` : opération (`fuse`, `split`, `move`, `store`, `retrieve`, `compress`, `expand`, `dup_check`, …).
+* `zone` : nom de zone impliquée (A, B, C ou composite).
+* `lum_id` : id unique d’un LUM si applicable (pour traçabilité fine). Pour opérations globales, `lum_id` peut être null; mais quand possible on log chaque LUM affecté.
+* `prev_count` / `post_count` : compte avant/après dans la zone.
+* `added` / `removed` : quantité ajoutée/enlevée.
+* `actor` : composant qui a fait l’opération (`vm:core`, `compiler`, `frontend`).
+* `pc` : programme counter (offset V-IR) pour corrélation code→trace.
+* `note` : champ optionnel libre pour messages d’erreur.
+
+**Pourquoi ce format** :
+
+* JSONL est analysable en temps réel (stream).
+* Permet de rejouer exactement: logs sont suffisants pour replay deterministe (si l’exécuteur est deterministe).
+* Traçabilité LUM par LUM : on peut donner un `lum_id` par LUM physique/virtuel, suivre sa vie (création, mouvement, fusion) jusqu’à destruction.
+
+---
+
+# Horodatage : la résolution la plus fine possible sur Replit
+
+* **Sur Linux** utiliser `clock_gettime(CLOCK_MONOTONIC, &ts)` pour `ts.tv_nsec` → ns resolution (réelle résolution dépend du kernel/hardware).
+* **Performance réaliste sur Replit** : latence de syscalls et scheduling peut faire que `ts_ns` ait jitter. Estimations réalistes :
+
+  * Interpréteur Python prototype : 1–5 ms/tick.
+  * C + assembleur dans container Replit : **\~50–500 µs/tick** (dépend du plan Replit: Free vs Core).
+  * Machine dédiée : **<10–50 µs/tick** possible.
+* Nous loggons en ns mais acceptons jitter ; pour synchronisation fine, on inclut `tick`.
+
+---
+
+# Design V-IR (bytecode) — spécification synthétique (doit figurer dans `docs/spec_v_ir.md`)
+
+* Instruction = 1 octet opcode + N octets d’arguments.
+* Types d’arguments court (1 octet id zone) ou 2 octets counts.
+* Opcodes principaux (exemples) :
+
+  * `0x10` FUSE zone\_id count\_u16
+  * `0x11` SPLIT src\_id dst\_count dst\_id\[dst\_count]
+  * `0x12` MOVE src\_id dst\_id count\_u16
+  * `0x13` STORE mem\_id src\_id count\_u16
+  * `0x14` RETRIEVE mem\_id dst\_id
+  * `0x15` CYCLE zone\_id mod\_u16
+  * `0x20` COMPRESS src\_count list -> dst\_id cost\_f32
+  * `0x21` EXPAND src\_id dst\_count factor\_u16
+  * `0xFF` HALT
+
+---
+
+# Implémentation : squelettes de code essentiels (tu peux copier-coller)
+
+> NOTE : ci-dessous je fournis des squelettes minimalistes prêts à coller ; je garde le code compact mais fonctionnel.
+
+## 1) `lums-core/forth/lums.fs` (squelette Forth)
+
+```forth
+\ lums.fs -- primitives LUM pour Gforth
+\ usage: : fuse-zone ( zone-id n -- ) ...
+variable zones-base  \ address base for zones table (we'll simulate as array)
+
+: init-zones ( addr n -- )  \ addr=base, n=zone_count
+  zones-base ! ;
+
+: zone+! ( zone-id n -- )  \ zones[zone-id] += n
+  \ this is demo pseudocode for gforth; real code uses allot and @ !
+  \ implement accessing memory cells with @ !
+  ;
+
+: fuse ( zone n -- )  \ add n LUM to zone
+  zone+! ;
+
+: move ( src dst n -- ) \ move n from src to dst
+  \ tmp = min(n, zones[src]); zones[src] -= tmp; zones[dst] += tmp ;
+  ;
+\ add other primitives: split, store, retrieve, cycle...
+```
+
+> Ce Forth est volontairement minimal — l’idée est d’avoir des primitives testables dans Gforth. Gforth permet `create`, `allot`, `@` et `!` pour manipuler mémoire.
+
+## 2) `lums-core/asm/lum_primitives.asm` (NASM x86-64 skeleton)
+
+```asm
+; lum_primitives.asm
+; build: nasm -felf64 lum_primitives.asm && ld -o lum_primitives lum_primitives.o
+
+section .bss
+zones:   resq 256   ; 256 zones (qword counts)
+
+section .text
+global fuse_zone
+fuse_zone:
+    ; args: rdi = zone_index, rsi = count
+    mov rcx, [zones + rdi*8]
+    add rcx, rsi
+    mov [zones + rdi*8], rcx
+    ret
+
+global move_zone
+move_zone:
+    ; rdi = src, rsi = dst, rdx = n
+    mov rax, [zones + rdi*8]
+    cmp rax, rdx
+    cmovae rax, rdx  ; rax = min(rax, rdx) using cmovae requires flags; for simplicity:
+    ; simpler: if rax < rdx then rax = rax else rax = rdx
+    cmp rax, rdx
+    jl .use_rax
+    mov rax, rdx
+.use_rax:
+    sub [zones + rdi*8], rax
+    add [zones + rsi*8], rax
+    ret
+```
+
+> Ce code est volontairement simple; il montre comment stocker zones en tableau 64-bit.
+
+## 3) `bit-bridge/encoder.c` (C skeleton)
+
+```c
+// encoder.c
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    uint32_t id;
+    uint8_t  presence;  // 0 or 1 (or more)
+    uint8_t  structure; // 0=line,1=circle,2=cluster,3=node
+    uint16_t pos;
+} lum_t;
+
+lum_t *encode_bits_to_lums(const uint8_t *bits, size_t len, size_t *out_count) {
+    // simple mapping: each 1 bit -> one LUM.presence=1
+    size_t max = len;
+    lum_t *out = malloc(sizeof(lum_t)*max);
+    size_t idx = 0;
+    for (size_t i=0;i<len;i++){
+        if (bits[i>>3] & (1<<(i&7))){
+            out[idx].id = (uint32_t)idx+1;
+            out[idx].presence = 1;
+            out[idx].structure = 0;
+            out[idx].pos = (uint16_t)idx;
+            idx++;
+        }
+    }
+    *out_count = idx;
+    return out;
+}
+
+// similar decode function...
+```
+
+## 4) `console-server/server.c` — serveur TCP simple (streams JSONL)
+
+```c
+// server.c : compile with gcc -o server server.c -lpthread
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <time.h>
+
+#define PORT 5000
+void run_server() {
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in serv;
+    serv.sin_family = AF_INET;
+    serv.sin_addr.s_addr = INADDR_ANY;
+    serv.sin_port = htons(PORT);
+    bind(sockfd, (struct sockaddr*)&serv, sizeof(serv));
+    listen(sockfd, 5);
+    printf("server listening on %d\n", PORT);
+    int client = accept(sockfd, NULL, NULL);
+    if (client < 0) return;
+    // read commands from stdin and forward as logs to client
+    char buf[4096];
+    while (fgets(buf, sizeof(buf), stdin)) {
+        write(client, buf, strlen(buf));
+    }
+    close(client);
+    close(sockfd);
+}
+int main(){ run_server(); return 0;}
+```
+
+> Mode d’emploi : on lance `./server` sur Replit, on pipe logs vers stdin du process server pour qu’il les retransmette au navigateur connecté (port 5000). C’est minimaliste, sans frontend, juste console streaming.
+
+---
+
+# Pipeline bootstrap (détaillé étape par étape)
+
+Je te donne la **séquence** à suivre, avec commandes exactes pour Replit terminal (ou un PC Linux). Je suppose Debian-like (apt available).
+
+> **Étape 0 — Préparer l’environnement (Replit / PC)**
+> Commandes (Replit shell ou VM) :
+
+```bash
+# sur Replit / Debian-like
+sudo apt-get update
+sudo apt-get install -y nasm gcc make git build-essential gforth
+
+# cloner le repo template
+git clone <your-repo-url> lums-vorax && cd lums-vorax
+mkdir -p lums-core/forth lums-core/asm bit-bridge vorax-compiler vorax-vm console-server tools docs
+```
+
+> **Étape 1 — Prototyper primitives en Forth** (`lums-core/forth/lums.fs`)
+
+* Objectif : tester comportement LUM sans assembler.
+* Action : écrire primitives `fuse`, `move`, `split`, `store`, `retrieve`, `cycle`.
+* Test : lancer Gforth REPL, charger `lums.fs`, exécuter scénarios simples et observer la table des zones (print).
+
+> **Étape 2 — Implémenter primitives en Assembleur** (`lums-core/asm/lum_primitives.asm`)
+
+* Objectif : obtenir performance et accès mémoire bas-niveau.
+* Commandes :
+
+```bash
+# dans lums-core/asm
+nasm -felf64 lum_primitives.asm -o lum_primitives.o
+ld -o lum_primitives lum_primitives.o
+# ou crée une librairie .a et link dans vm
+```
+
+* Test : écrire un petit `test_asm.c` qui appelle `fuse_zone` via extern C et vérifie counts.
+
+> **Étape 3 — Encoder Bits→LUM (C)** (`bit-bridge/encoder.c`)
+
+* Compile `gcc -O3 -c encoder.c -o encoder.o` et link.
+
+> **Étape 4 — VM LUM (C + asm)** (`vorax-vm/vm.c`)
+
+* Implémente fetch-decode-execute loop pour V-IR, appelle primitives asm pour exécution.
+* Génère logs JSONL à chaque opération (écris sur `stdout` ou un fichier `logs.jsonl`).
+
+> **Étape 5 — Console server (C)** (`console-server/server.c`)
+
+* Démarrer `./server` sur Replit; connecter navigateur à la view Replit -> port 5000.
+* Le VM écrit sur `stdout` les logs ; tu rediriges vers socket client (ex: `./vm | ./server`).
+
+> **Étape 6 — Compiler VORAX (parser minimal en C)** (`vorax-compiler/parser.c`)
+
+* Parsage minimal, transforme VORAX→V-IR (d’après la spec\_bnf).
+* Test : compiler une instruction `fuse A 2` en bytecode `0x10 [zoneA][0x02 0x00]`.
+
+> **Étape 7 — Intégration & Test end-to-end**
+
+* Scénario :
+
+  * `echo "fuse A 3\nsplit A -> [B,C]\nmove B -> D,1" > program.vx`
+  * `voraxc program.vx -o program.vir`
+  * `./vm program.vir | ./server` puis visite Replit view pour voir le flux JSONL.
+
+> **Étape 8 — Tests & invariant checks**
+
+* Test unitaire : total LUM conservation (sauf compress) : write test harness that runs program, sums zones before/after.
+* Fuzzing : generate random V-IR sequences, run VM, assert invariants.
+
+> **Étape 9 — Bootstrapping final**
+
+* Une fois VM & compiler stables :
+
+  * Réécris le compilateur `voraxc` en VORAX-L (en utilisant primitives disponibles) et compile via earlier assembler-compiled minimal.
+  * À la fin, l’écosystème est auto-hébergé.
+
+---
+
+# Logging, monitoring et corrélation temps-réel (détails)
+
+1. **Flux de logs**
+
+   * VM write logs to `stdout` in JSONL.
+   * Server reads VM stdout and re-streams it to any connected client (socket).
+   * Post-processing via `tools/analyze_logs.py` : calculate per-LUM lifetime, detect duplicates, generate graphs.
+
+2. **Format minimal de logs (message par opération)**
+
+   * Exemple `fuse` event (JSONL) : includes `ts_ns`, `tick`, `op`, `zone`, `added`, `prev_count`, `post_count`, `pc`, `tx_id`.
+
+3. **Persistance**
+
+   * Save `logs.jsonl` at each run. Use rotation (e.g. `logs.jsonl.1`, `logs.jsonl.2`) to avoid huge files.
+
+4. **Rejeu/determinisme**
+
+   * VM deterministic: same program + same initial state => same logs.
+   * For replay, have `vm --replay logs.jsonl` to reconstruct state step-by-step.
+
+5. **Alerting (local)**
+
+   * `tools/check_invariants.sh` runs every N ticks (or on-demand): asserts total LUM conserved (modulo compress/expand with cost). If violation => write `error.json` and notify in console stream.
+
+---
+
+# Tests & validation (sûreté)
+
+1. **Unit tests** (C & asm primitives)
+
+   * Test fuse increments, move transfers min(src,n), split distributes correctly `divmod` logic.
+
+2. **Property tests**
+
+   * For random programs (bounded), assert invariants:
+
+     * `sum(zones) == initial_sum` unless compress used.
+     * no `lum_id` duplication unless generated by `expand`.
+     * `mem[...] >= 0`.
+
+3. **Fuzzing**
+
+   * Generate random V-IR sequences (with constraints) and run VM; check for crashes, invariant violations.
+
+4. **Regression suite**
+
+   * Store canonical programs & their expected logs; run nightly tests.
+
+---
+
+# Sécurité & robustesse
+
+* **Sandbox**: Replit isolates; VM runs in userland, mais code native doit gérer buffer overflow dangereusement — compile avec `-fstack-protector-strong -D_FORTIFY_SOURCE=2 -O2`.
+* **Validation input**: parser refuse opcodes invalides.
+* **Memory safety**: limit inputs sizes, check bounds on arrays.
+
+---
+
+# Estimations de performance (pragmatique)
+
+* **Replit Free** :
+
+  * CPU partagé → expect \~50–500 µs/op dépendant du code natif.
+  * RAM \~1GB → good for thousands of LUMs but not millions.
+* **Replit Core / machine dédiée** :
+
+  * \~10–50 µs/op ou mieux selon optimisation assembleur.
+* **Réel matériel / kernel level / FPGA** :
+
+  * µs → ns scale possible (mais hors Replit).
+
+Important : ces chiffres sont estimations *raisonnables* ; la mesure finale se fera dès prototype asm+vm en place (on instrumente et on mesure).
+
+---
+
+# Plan de livrables & calendrier détaillé (précis)
+
+Je prévois un rythme raisonnable si tu veux que je **rédige tous les fichiers et le plan d’exécution** (à toi de lancer sur Replit / PC) :
+
+* **Jour 0 (préparation)** : repo git initial + structure (commands above).
+* **J1–J2 (Phase 1)** : primitives Forth + tests interactifs (livrable : `lums-core/forth/lums.fs` + test script).
+* **J3–J4 (Phase 2)** : assembler primitives + C bridge (livrable : `lums-core/asm/lum_primitives.asm`, `bit-bridge/encoder.c`).
+* **J5–J8 (Phase 3)** : VM LUM (vm.c + vm\_asm.s), V-IR spec (docs). Unit tests & logging.
+* **J9–J11 (Phase 4)** : Parser VORAX minimal (parser.c), codegen to V-IR, end-to-end example programs.
+* **J12–J13 (Phase 5)** : Console server & streaming, JSONL logs, analyze tools.
+* **J14–J16 (Phase 6)** : Bootstrap steps to recompile compiler in VORAX-L; property tests, fuzzing.
+* **J17** : Packaging, README, docs.
+
+Total : **\~3 semaines** (tu peux raccourcir si tu veux prototype plus petit; ou allonger pour hardening).
+
+---
+
+# Plan de continuité / CI + sauvegarde
+
+* **CI pipeline** (GitHub Actions / Replit Run) :
+
+  * Lint C (clang-tidy)
+  * Build asm & C
+  * Run unit tests, run small demo program → compare logs to expected.
+* **Backups** : push logs to repo or S3-like storage each run.
+* **Monitoring** : simple cron script to run `tools/analyze_logs.py` and output metrics.
+
+---
+
+# Liste complète des fichiers à créer (contenu minimal pour démarrer)
+
+Je répète ici le jeu de fichiers et leur rôle (tu peux me demander de générer le texte complet de chaque fichier — je peux le faire tout de suite) :
+
+* `lums-core/forth/lums.fs` — primitives Forth
+* `lums-core/asm/lum_primitives.asm` — asm primitive functions
+* `bit-bridge/encoder.c` & `decoder.c` — encode/decode
+* `vorax-vm/vm.c` & `vm_asm.s` — VM
+* `vorax-compiler/parser.c` & `codegen.c` — parser -> V-IR
+* `console-server/server.c` — streaming server
+* `tools/analyze_logs.py` — outil d’analyse et visualisation
+* `docs/spec_v_ir.md`, `docs/spec_vorax_syntax.md`, `docs/plan_bootstrap.md`
+* `Makefile` root that builds all pieces with proper dependencies
+
+---
+
+# Risques & stratégies d’atténuation (liste exhaustive)
+
+1. **Replit interdit `apt`** → mitigation : utiliser container local / PC ou utiliser images Replit qui ont gforth instalado. Si impossible, on peut porter tout en C (moins pratique pour bootstrap).
+2. **Time limits sur Replit** → mitigation : sauvegarder artefacts souvent, exécuter tests locaux sur PC.
+3. **Bugs de sécurité (C/asm)** → mitigation : compile flags de sécurité, tests fuzzing, revue de code.
+4. **Non-déterminisme dû au scheduling** → mitigation : log tick + ts\_ns ; possibilité de run in single-thread mode for determinism.
+5. **Budget non-conservative mal géré** → mitigation : design de coût strict, coverage tests for compress/expand.
+6. **Duplication accidentelle** → mitigation : type checks during codegen, runtime dup\_check.
+
+---
+
+# Comment je procèderai si tu me demandes de coder pour toi (instructions d’acceptation)
+
+Si tu veux que je **génère tout le code** pour les fichiers listés (squelettes + tests + Makefiles), dis **“GÉNÈRE LE PROJET”** et je crée, dans l’ordre :
+
+1. `lums-core/forth/lums.fs` complet (primitives testables).
+2. `lums-core/asm/lum_primitives.asm` compilable.
+3. `bit-bridge/encoder.c` & tests.
+4. `vorax-vm/vm.c` + logging JSONL.
+5. `console-server/server.c`.
+6. `vorax-compiler/parser.c` (minimal).
+7. `tools/analyze_logs.py` (analyse simple).
+8. `README` + `docs` + `Makefile`.
+
+Je fournis aussi les **commandes exactes** à lancer dans Replit shell pour exécuter le prototype `hello world` VORAX et voir les logs LUM par LUM.
+
+---
+
+# Exemples d’exécution (commands ready-to-copy)
+
+1. Build primitives asm & encoder:
+
+```bash
+cd lums-vorax/lums-core/asm
+nasm -felf64 lum_primitives.asm -o lum_primitives.o
+ar rcs liblum.a lum_primitives.o
+cd ../../bit-bridge
+gcc -O3 -c encoder.c -o encoder.o
+ar rcs libbit.a encoder.o
+```
+
+2. Build VM and link:
+
+```bash
+cd ../vorax-vm
+gcc -O3 -I../bit-bridge -L../lums-core/asm -o vm vm.c ../bit-bridge/encoder.o ../lums-core/asm/lum_primitives.o -pthread
+```
+
+3. Start server and run vm:
+
+```bash
+cd ../console-server
+gcc -O2 server.c -o server
+# in two terminals:
+# terminal 1:
+./server
+# terminal 2:
+cd ../vorax-vm
+./vm program.vir  # vm writes JSONL on stdout; redirect into server via pipe if you wish
+```
+
+---
+
+# Validation finale et critères d’acceptation
+
+Ton prototype sera validé SI :
+
+1. Les primitives `fuse`, `move`, `split`, `store`, `retrieve`, `cycle` sont implémentées et testées.
+2. L’encodeur bit→LUM convertit un flux binaire en tableau `lum_t` (test: roundtrip decode->encode equal).
+3. Le VM exécute un programme V-IR minimal et produit logs JSONL horodatés.
+4. Le serveur stream les logs sur le port 5000 pour visualisation console.
+5. Tests d’invariants (conservation, non-duplication) passent sur un set de tests.
+6. Documentation `docs/*` est complète (spec V-IR, syntaxe VORAX).
+
+---
+
+# Remarques finales — recommandations pratiques
+
+* **Commencer par Forth** pour itérer rapidement sur la logique LUM. Une fois la sémantique stable, porter en assembleur pour la perf.
+* **Utiliser Replit** pour prototypage, mais prévoir un PC local/VM pour builds ASM complets et tests de perf.
+* **Enregistrer tout** (logs JSONL) : c’est la clé pour corriger en temps réel et rejouer exactement chaque erreur.
+* **Prioriser la traçabilité** : assigner un `lum_id` dès la création d’un LUM et loguer toute mutation ; cela rend le debug simple.
+
+---
+
+Si tu veux **maintenant**, je peux :
+
+1. **Générer tout le code** des fichiers listés (squelettes et tests) ici même — prêt à coller dans Replit.
+2. Ou **commencer par générer uniquement `lums-core/forth/lums.fs` + script de test** pour que tu valides les primitives avant qu’on écrive l’asm/C.
+
+Dis simplement : **1** pour générer tout le projet, **2** pour générer juste la partie Forth (primitives + tests), ou **3** pour que je génère l’assembleur + tests.
+
+Je commence immédiatement la génération de fichiers lorsque tu me dis ton choix — tout ici, dans ce chat, prêt à copier/coller dans Replit.

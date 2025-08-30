@@ -1,5 +1,4 @@
-The Makefile has been updated to include security audit and fix capabilities, enhancing the CI pipeline.
-<replit_final_file># LUMS/VORAX Build System
+# LUMS/VORAX Build System
 # Complete Makefile with all targets as specified in reports
 
 CC = gcc
@@ -44,10 +43,10 @@ $(BUILD_DIR):
 test: $(LUMS_LIB)
 	@echo "🧪 Running C unit tests..."
 	@if [ -f tests/test_lums.c ]; then \
-		$(CC) $(CFLAGS) tests/test_lums.c -L$(BUILD_DIR) -llums -o $(BUILD_DIR)/test_lums && \
-		./$(BUILD_DIR)/test_lums; \
+	        $(CC) $(CFLAGS) tests/test_lums.c -L$(BUILD_DIR) -llums -o $(BUILD_DIR)/test_lums && \
+	        ./$(BUILD_DIR)/test_lums; \
 	else \
-		echo "⚠️  No C test file found, skipping C tests"; \
+	        echo "⚠️  No C test file found, skipping C tests"; \
 	fi
 
 # JavaScript/TypeScript triple tests
@@ -73,8 +72,8 @@ release: clean $(LUMS_LIB)
 lint:
 	@echo "🔍 Linting C code..."
 	@for file in $(SOURCES); do \
-		echo "Checking $$file..."; \
-		$(CC) $(CFLAGS) -fsyntax-only $$file || exit 1; \
+	        echo "Checking $$file..."; \
+	        $(CC) $(CFLAGS) -fsyntax-only $$file || exit 1; \
 	done
 	@echo "✅ All C files passed lint check"
 

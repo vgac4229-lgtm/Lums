@@ -67,7 +67,6 @@ typedef struct {
     VoraxMemory* memory_slots;
     size_t memory_count;
     char* last_error;
-    char error_message[256];
 } VoraxEngine;
 
 // Core encoding/decoding functions
@@ -105,6 +104,5 @@ void print_vorax_engine_state(VoraxEngine* engine);
 // Error handling
 const char* vorax_get_last_error(VoraxEngine* engine);
 void vorax_clear_error(VoraxEngine* engine);
-void vorax_set_error(VoraxEngine* engine, const char* error_msg);
 
 #endif // LUMS_H
