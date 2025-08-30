@@ -1,5 +1,5 @@
 
-import fs from 'fs';
+const fs = require('fs');
 
 // Triple Test Framework - As required by specifications
 class TripleTestRunner {

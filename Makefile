@@ -3,7 +3,7 @@
 # Complete Makefile with all targets as specified in reports
 
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -pedantic -fPIC
+CFLAGS = -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare
 DEBUG_FLAGS = -g3 -DDEBUG -fsanitize=address -fsanitize=undefined
 RELEASE_FLAGS = -O3 -march=native -DNDEBUG
 SRC_DIR = server/lums

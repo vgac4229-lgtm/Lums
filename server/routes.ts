@@ -3,6 +3,8 @@ import { body, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
 import { logger } from './logger';
 import { swaggerUi, swaggerSpec, swaggerOptions } from './api-docs';
+import { linearTypeChecker } from './linear-types';
+import { VIRMachine, VIROpcode } from './vm-vir';
 
 const router = express.Router();
 
@@ -359,6 +361,24 @@ router.post('/execute/vorax-operation', apiLimiter, validateVoraxOperation, hand
       : result.lums.length;
 
     const conservationValid = type === 'cycle' || resultLums === totalInputLums;
+
+    // Validation des contraintes de types linéaires
+    const inputLumIds = groups.flatMap(group => 
+      group.lums.map(lum => lum.lum_id || `unknown-${Math.random()}`)
+    );
+    const outputLumIds = Array.isArray(result)
+      ? result.flatMap(group => group.lums.map(lum => lum.lum_id || `unknown-${Math.random()}`))
+      : result.lums.map(lum => lum.lum_id || `unknown-${Math.random()}`);
+
+    const linearCheck = linearTypeChecker.checkLinearConstraints(type, inputLumIds, outputLumIds);
+    
+    if (!linearCheck.valid) {
+      logger.log('warn', 'Linear type constraints violated', {
+        op: 'linear_violation',
+        operation: type,
+        violations: linearCheck.violations
+      });
+    }
 
     // Log opération avec validation conservation complète
     logger.logLumOperation(

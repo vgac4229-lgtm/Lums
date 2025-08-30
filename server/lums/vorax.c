@@ -328,7 +328,10 @@ int vorax_execute_code(VoraxEngine* engine, const char* code) {
                     // Count LUMs (simplified)
                     int lum_count = 0;
                     for (char* p = colon; *p; p++) {
-                        if (*p == '•') lum_count++;
+                        if (strncmp(p, "•", 3) == 0) {
+                            lum_count++;
+                            p += 2; // Skip UTF-8 bytes
+                        }
                     }
                     
                     if (lum_count > 0) {

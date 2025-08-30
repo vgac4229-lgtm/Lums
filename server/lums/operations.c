@@ -54,7 +54,7 @@ LUMGroup** lum_split(LUMGroup* source, int zones, size_t* result_count) {
     size_t current_index = 0;
     
     for (int i = 0; i < zones; i++) {
-        size_t zone_count = lums_per_zone + (i < remainder ? 1 : 0);
+        size_t zone_count = lums_per_zone + ((size_t)i < remainder ? 1 : 0);
         
         if (zone_count == 0) {
             // Create empty zone
@@ -276,7 +276,7 @@ LUMGroup** lum_contextual_split(LUMGroup* source, size_t* result_count) {
         
         size_t type_index = 0;
         for (size_t i = 0; i < source->count; i++) {
-            if (source->lums[i].structure_type == type) {
+            if ((int)source->lums[i].structure_type == (int)type) {
                 type_lums[type_index] = source->lums[i];
                 type_lums[type_index].position.x = type_index * 20;
                 type_lums[type_index].position.y = type * 40;
