@@ -1,4 +1,3 @@
-
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
@@ -193,7 +192,7 @@ router.post('/convert/lum-to-bit', apiLimiter, (req, res) => {
     }
 
     const resultBits = lums.map((lum: any) => lum.presence.toString()).join('');
-    
+
     logger.log('info', 'LUM to bit conversion', {
       op: 'lum_to_bit_conversion',
       input_count: lums.length,
@@ -284,10 +283,10 @@ router.post('/execute/vorax-operation', apiLimiter, validateVoraxOperation, hand
         const sourceGroup = groups[0];
         const lumsPerZone = Math.floor(sourceGroup.lums.length / zones);
         const remainder = sourceGroup.lums.length % zones;
-        
+
         result = [];
         let currentIndex = 0;
-        
+
         for (let i = 0; i < zones; i++) {
           const zoneSize = lumsPerZone + (i < remainder ? 1 : 0);
           const zoneLums = sourceGroup.lums.slice(currentIndex, currentIndex + zoneSize)
@@ -295,7 +294,7 @@ router.post('/execute/vorax-operation', apiLimiter, validateVoraxOperation, hand
               ...lum,
               lum_id: lum.lum_id || `L-${logger.runId}-zone${i}-${index.toString().padStart(6, '0')}`
             }));
-          
+
           result.push({
             id: `split-zone-${i}-${Date.now()}`,
             lums: zoneLums,
@@ -315,7 +314,7 @@ router.post('/execute/vorax-operation', apiLimiter, validateVoraxOperation, hand
         const modulo = parameters.modulo || 3;
         const sourceGroup2 = groups[0];
         const cycledCount = sourceGroup2.lums.length % modulo;
-        
+
         result = {
           id: `cycle-${Date.now()}`,
           lums: sourceGroup2.lums.slice(0, cycledCount).map((lum: any, index: number) => ({

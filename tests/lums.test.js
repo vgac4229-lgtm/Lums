@@ -1,6 +1,5 @@
 
 import fs from 'fs';
-import { jest } from '@jest/globals';
 
 // Triple Test Framework - As required by specifications
 class TripleTestRunner {

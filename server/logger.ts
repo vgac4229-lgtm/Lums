@@ -112,9 +112,10 @@ class LUMLogger {
     lumIds.forEach((lumId, index) => {
       this.log('debug', `LUM ${operation} individual tracking`, {
         op: `${operation}_individual`,
-        lum_id: lumId,
         operation_sequence: `${index + 1}/${lumIds.length}`,
-        zone
+        zone,
+        lum_id: lumId,
+        ...metadata
       });
     });
 

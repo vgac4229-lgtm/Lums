@@ -369,7 +369,7 @@ void print_vorax_engine_state(VoraxEngine* engine) {
         if (engine->zones[i].group) {
             printf("%zu LUMs ", engine->zones[i].group->count);
             for (size_t j = 0; j < engine->zones[i].group->count && j < 10; j++) {
-                printf("%c", engine->zones[i].group->lums[j].presence ? '•' : '○');
+                printf("%s", engine->zones[i].group->lums[j].presence ? "•" : "○");
             }
             if (engine->zones[i].group->count > 10) {
                 printf("...");
@@ -493,7 +493,7 @@ void print_lum_group(LUMGroup* group) {
            group->group_type);
     
     for (size_t i = 0; i < group->count && i < 20; i++) {
-        printf("%c", group->lums[i].presence ? '•' : '○');
+        printf("%s", group->lums[i].presence ? "•" : "○");
     }
     if (group->count > 20) {
         printf("...");
