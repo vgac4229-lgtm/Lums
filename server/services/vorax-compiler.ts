@@ -17,7 +17,14 @@ export class VoraxCompiler {
     FUSE: 0x10,
     SPLIT: 0x11,
     MOVE: 0x12,
-
+    CYCLE: 0x13,
+    STORE: 0x14,
+    RETRIEVE: 0x15,
+    COMPRESS: 0x16,
+    EXPAND: 0x17,
+    NOP: 0x00,
+    HALT: 0xFF
+  };
 
   private tokenizeLine(line: string): string[] {
     const tokens: string[] = [];

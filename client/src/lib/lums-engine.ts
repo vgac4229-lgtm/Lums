@@ -148,7 +148,6 @@ export class LumsEngine {
     }
     
     return true;
-    );
   }
 
   validateGroup(group: LUMGroup): boolean {

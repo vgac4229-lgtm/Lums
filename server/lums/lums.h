@@ -81,6 +81,13 @@ LUMGroup* create_lum_group(LUM* lums, size_t count, GroupType type);
 void free_lum_group(LUMGroup* group);
 LUMGroup* clone_lum_group(LUMGroup* source);
 int compare_lum_groups(LUMGroup* group1, LUMGroup* group2);
+void print_lum_group(LUMGroup* group);
+
+// Advanced mathematics via LUMS
+LUMGroup* resolve_division_by_zero(LUMGroup* numerator);
+LUMGroup* sqrt_negative_via_lums(int negative_value);
+LUMGroup* represent_graham_number(int precision_level);
+int test_riemann_hypothesis_lums(double s_real, double s_imag);
 
 // VORAX Operations
 LUMGroup* lum_fusion(LUMGroup* group1, LUMGroup* group2);
@@ -99,7 +106,6 @@ LUMGroup* vorax_retrieve_memory(VoraxEngine* engine, const char* name);
 
 // Validation and debugging
 int validate_lums(LUM* lums, size_t count);
-void print_lum_group(LUMGroup* group);
 void print_vorax_engine_state(VoraxEngine* engine);
 
 // Error handling

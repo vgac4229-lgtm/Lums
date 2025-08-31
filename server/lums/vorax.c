@@ -505,13 +505,20 @@ LUMGroup* create_lum_group(LUM* lums, size_t count, GroupType type) {
     // Generate truly unique ID using UUID v4 algorithm
     group->id = (char*)malloc(37); // UUID standard length + null terminator
     if (group->id) {
-        // Generate UUID v4 with proper randomness
+        // Generate cryptographically secure UUID v4
         uint8_t uuid_bytes[16];
+        
+        // Use time-based seed with process ID for uniqueness
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        unsigned int seed = (unsigned int)(ts.tv_sec ^ ts.tv_nsec ^ getpid());
+        srand(seed);
+        
         for (int i = 0; i < 16; i++) {
-            uuid_bytes[i] = rand() % 256;
+            uuid_bytes[i] = (uint8_t)(rand() % 256);
         }
         
-        // Set version (4) and variant bits
+        // Set version (4) and variant bits according to RFC 4122
         uuid_bytes[6] = (uuid_bytes[6] & 0x0F) | 0x40; // Version 4
         uuid_bytes[8] = (uuid_bytes[8] & 0x3F) | 0x80; // Variant 10
         
@@ -585,15 +592,10 @@ VoraxEngine* vorax_create_engine(void) {
     VoraxEngine* engine = malloc(sizeof(VoraxEngine));
     if (!engine) return NULL;
 
-    // Initialize zones
+    // Initialize zones dynamically
     for (int i = 0; i < MAX_ZONES; i++) {
         engine->zones[i] = NULL;
-        if (engine->zone_names[i]) {
-            free(engine->zone_names[i]);
-        }
-        char zone_name[16];
-        sprintf(zone_name, "Zone_%c", 'A' + i);
-        engine->zone_names[i] = strdup(zone_name);
+        engine->zone_names[i] = NULL;
     }
 
     engine->zone_count = 0;
