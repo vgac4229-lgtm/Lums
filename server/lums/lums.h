@@ -107,4 +107,22 @@ const char* vorax_get_last_error(VoraxEngine* engine);
 void vorax_clear_error(VoraxEngine* engine);
 void vorax_set_error(VoraxEngine* engine, const char* error_msg);
 
+// VM VORAX functions
+VoraxEngine* vorax_create_engine(void);
+void vorax_destroy_engine(VoraxEngine* engine);
+int vorax_fuse_zones(VoraxEngine* engine, int zone1, int zone2);
+int vorax_split_zone(VoraxEngine* engine, int zone, int parts);
+int vorax_move_lums(VoraxEngine* engine, int src_zone, int dst_zone, int amount);
+int vorax_cycle_zone(VoraxEngine* engine, int zone, int modulo);
+int vorax_store_memory(VoraxEngine* engine, int memory_slot, int zone, int amount);
+int vorax_retrieve_memory(VoraxEngine* engine, int memory_slot, int zone);
+
+// Bootstrap sequence
+int vorax_bootstrap_phase1(void);  // Initialize core primitives
+int vorax_bootstrap_phase2(void);  // Load assembler definitions
+int vorax_bootstrap_phase3(void);  // Compile bit→LUM encoder
+int vorax_bootstrap_phase4(void);  // Initialize VM
+int vorax_bootstrap_phase5(void);  // Start console server
+int vorax_bootstrap_phase6(void);  // Compile VORAX-L
+
 #endif // LUMS_H

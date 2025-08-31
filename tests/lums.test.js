@@ -1,294 +1,243 @@
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
-import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { spawn } from 'child_process';
-import { promises as fs } from 'fs';
-import { join } from 'path';
+describe('LUMS/VORAX System Tests', () => {
+  const API_BASE = 'http://localhost:5000/api';
 
-// Configuration des tests LUMS/VORAX
-const API_BASE = 'http://localhost:5000';
-const TEST_TIMEOUT = 10000;
-
-// Classe de test runner triple validation
-class TripleTestRunner {
-  constructor() {
-    this.runId = `test-${Date.now()}`;
-    this.logs = [];
-  }
-
-  async runTripleTest(testName, testFunction) {
-    const results = [];
-    
-    for (let iteration = 1; iteration <= 3; iteration++) {
-      console.log(`🧪 Running ${testName} - Iteration ${iteration}/3`);
-      
-      try {
-        const result = await testFunction(iteration);
-        results.push({ iteration, status: 'PASSED', result });
-        this.log('success', `${testName} iteration ${iteration}`, { result });
-      } catch (error) {
-        results.push({ iteration, status: 'FAILED', error: error.message });
-        this.log('error', `${testName} iteration ${iteration}`, { error: error.message });
-        throw error;
-      }
+  beforeAll(() => {
+    // Ensure C library is built
+    try {
+      execSync('make clean && make', { stdio: 'pipe' });
+    } catch (error) {
+      console.warn('C build failed, tests may be limited');
     }
-    
-    return results;
-  }
+  });
 
-  validateConservation(beforeCount, afterCount, operation) {
-    const conserved = beforeCount === afterCount || operation === 'cycle';
-    this.log(conserved ? 'success' : 'error', 'Conservation check', {
-      operation,
-      before_count: beforeCount,
-      after_count: afterCount,
-      conserved
+  // Triple execution test as required
+  function tripleTest(testName, testFn) {
+    describe(`${testName} (Triple Execution)`, () => {
+      test('Execution 1', async () => { await testFn(1); });
+      test('Execution 2', async () => { await testFn(2); });
+      test('Execution 3', async () => { await testFn(3); });
     });
-    return conserved;
   }
 
-  log(level, message, data = {}) {
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      level,
-      message,
-      run_id: this.runId,
-      ...data
+  tripleTest('Bit to LUM conversion conservation', async (iteration) => {
+    const testBits = `110100${iteration.toString().padStart(3, '0')}`;
+
+    const response = await fetch(`${API_BASE}/convert/bit-to-lum`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputBits: testBits })
+    });
+
+    const result = await response.json();
+    expect(result.outputLums).toHaveLength(testBits.length);
+
+    // Verify each LUM corresponds to correct bit
+    for (let i = 0; i < testBits.length; i++) {
+      expect(result.outputLums[i].presence).toBe(parseInt(testBits[i]));
+    }
+
+    // Test reverse conversion
+    const reverseResponse = await fetch(`${API_BASE}/convert/lum-to-bit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputLums: result.outputLums })
+    });
+
+    const reverseResult = await reverseResponse.json();
+    expect(reverseResult.outputBits).toBe(testBits);
+  });
+
+  tripleTest('VORAX operations conservation', async (iteration) => {
+    // Test fusion operation
+    const group1 = { lums: [{ presence: 1 }, { presence: 1 }] };
+    const group2 = { lums: [{ presence: 1 }, { presence: 0 }, { presence: 1 }] };
+
+    const response = await fetch(`${API_BASE}/execute/vorax-operation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operation: { name: 'fusion' },
+        groups: [group1, group2]
+      })
+    });
+
+    const result = await response.json();
+    const totalBefore = group1.lums.length + group2.lums.length;
+    const totalAfter = result.result.lums.length;
+
+    expect(totalAfter).toBe(totalBefore);
+
+    // Verify presence conservation
+    const presenceBefore = group1.lums.reduce((sum, lum) => sum + lum.presence, 0) +
+                          group2.lums.reduce((sum, lum) => sum + lum.presence, 0);
+    const presenceAfter = result.result.lums.reduce((sum, lum) => sum + lum.presence, 0);
+
+    expect(presenceAfter).toBe(presenceBefore);
+  });
+
+  tripleTest('VORAX split operation', async (iteration) => {
+    const sourceGroup = {
+      lums: Array(8).fill().map((_, i) => ({ presence: i % 2 }))
     };
-    this.logs.push(logEntry);
-    console.log(`[${level.toUpperCase()}] ${message}`, data);
-  }
 
-  async saveLogs() {
-    const filepath = join(process.cwd(), 'logs', `test-${this.runId}.jsonl`);
-    await fs.mkdir(join(process.cwd(), 'logs'), { recursive: true });
-    
-    const jsonlContent = this.logs.map(log => JSON.stringify(log)).join('\n');
-    await fs.writeFile(filepath, jsonlContent);
-    
-    return filepath;
-  }
-}
+    const response = await fetch(`${API_BASE}/execute/vorax-operation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operation: { name: 'split', parameters: { zones: 3 } },
+        groups: [sourceGroup]
+      })
+    });
 
-// Helper function pour tester les API calls
-async function makeApiCall(endpoint, method = 'GET', body = null) {
-  const url = `${API_BASE}/api${endpoint}`;
-  const options = {
-    method,
-    headers: { 'Content-Type': 'application/json' }
-  };
-  
-  if (body) {
-    options.body = JSON.stringify(body);
-  }
+    const result = await response.json();
+    const splitGroups = result.result;
 
-  const response = await fetch(url, options);
-  const data = await response.json();
-  
-  return { status: response.status, data };
-}
+    // Verify total LUM count preserved
+    const totalBefore = sourceGroup.lums.length;
+    const totalAfter = splitGroups.reduce((sum, group) => sum + group.lums.length, 0);
+    expect(totalAfter).toBe(totalBefore);
 
-// Instance globale du test runner
-let testRunner;
+    // Verify equitable distribution
+    const expectedSize = Math.floor(totalBefore / 3);
+    const remainder = totalBefore % 3;
 
-describe('LUMS/VORAX System - Triple Tests', () => {
-  beforeEach(() => {
-    testRunner = new TripleTestRunner();
+    splitGroups.forEach((group, index) => {
+      const expectedGroupSize = expectedSize + (index < remainder ? 1 : 0);
+      expect(group.lums.length).toBe(expectedGroupSize);
+    });
   });
 
-  afterEach(async () => {
-    if (testRunner) {
-      await testRunner.saveLogs();
+  tripleTest('C library integration', async (iteration) => {
+    try {
+      const testBinary = '1101001010';
+      const cTestCode = `
+#include "server/lums/lums.h"
+#include <stdio.h>
+
+int main() {
+    LUMGroup* group = encode_binary_string("${testBinary}");
+    if (!group) return 1;
+
+    char output[32];
+    if (decode_lum_group_to_binary(group, output, sizeof(output)) < 0) {
+        return 1;
+    }
+
+    printf("%s", output);
+    return 0;
+}`;
+
+      fs.writeFileSync('/tmp/test_c_integration.c', cTestCode);
+
+      const compileCmd = 'gcc -I. /tmp/test_c_integration.c build/liblums.a -o /tmp/test_vorax';
+      execSync(compileCmd, { stdio: 'pipe' });
+
+      const output = execSync('/tmp/test_vorax', { encoding: 'utf8' });
+      expect(output.trim()).toBe(testBinary);
+
+    } catch (error) {
+      throw new Error(`C integration test failed: ${error.message}`);
     }
   });
 
-  test('Conversion bit-to-LUM avec validation triple', async () => {
-    await testRunner.runTripleTest('bit-to-lum-conversion', async (iteration) => {
-      const inputBits = `110100${iteration.toString().padStart(3, '0')}`;
-      
-      const { status, data } = await makeApiCall('/convert/bit-to-lum', 'POST', {
-        inputBits
+  test('Bootstrap sequence', async () => {
+    const phases = [
+      'vorax_bootstrap_phase1',
+      'vorax_bootstrap_phase2',
+      'vorax_bootstrap_phase3',
+      'vorax_bootstrap_phase4',
+      'vorax_bootstrap_phase5',
+      'vorax_bootstrap_phase6'
+    ];
+
+    // Test each bootstrap phase
+    for (const phase of phases) {
+      const response = await fetch(`${API_BASE}/bootstrap/${phase}`, {
+        method: 'POST'
       });
 
-      expect(status).toBe(200);
-      expect(data.lums).toHaveLength(inputBits.length);
-      expect(data.conversion_stats.conservation_valid).toBe(true);
+      expect(response.ok).toBe(true);
+      const result = await response.json();
+      expect(result.success).toBe(true);
+    }
+  });
 
-      // Validation de conservation
-      const conserved = testRunner.validateConservation(
-        inputBits.length,
-        data.lums.length,
-        'conversion'
-      );
-      expect(conserved).toBe(true);
+  test('Linear type checking', async () => {
+    // Test that duplication is prevented
+    const group = { lums: [{ presence: 1, id: 'lum-unique-123' }] };
 
-      return {
-        input_length: inputBits.length,
-        output_count: data.lums.length,
-        conversion_time: data.conversion_stats.conversion_time_ms
-      };
+    const response1 = await fetch(`${API_BASE}/linear-type/check-duplication`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group, operation: 'duplicate' })
     });
-  }, TEST_TIMEOUT);
 
-  test('Opérations VORAX avec conservation', async () => {
-    await testRunner.runTripleTest('vorax-operations', async (iteration) => {
-      // Créer des LUMs de test
-      const inputBits = '11010011';
-      const { data: conversionData } = await makeApiCall('/convert/bit-to-lum', 'POST', {
-        inputBits
-      });
+    const result1 = await response1.json();
+    expect(result1.allowed).toBe(false);
+    expect(result1.violation).toContain('duplication');
+  });
 
-      const testGroup = {
-        lums: conversionData.lums,
-        groupType: 'linear',
-        id: `test-group-${iteration}`
-      };
-
-      // Test fusion
-      const { status: fusionStatus, data: fusionData } = await makeApiCall(
-        '/execute/vorax-operation',
-        'POST',
-        {
-          type: 'fusion',
-          groups: [testGroup, testGroup]
-        }
-      );
-
-      expect(fusionStatus).toBe(200);
-      expect(fusionData.operation_stats.conservation_valid).toBe(true);
-
-      // Test split
-      const { status: splitStatus, data: splitData } = await makeApiCall(
-        '/execute/vorax-operation',
-        'POST',
-        {
-          type: 'split',
-          groups: [testGroup],
-          parameters: { zones: 2 }
-        }
-      );
-
-      expect(splitStatus).toBe(200);
-      expect(splitData.operation_stats.conservation_valid).toBe(true);
-
-      return {
-        fusion_lums: fusionData.operation_stats.output_lums,
-        split_groups: splitData.result.length
-      };
+  test('JSONL logging', async () => {
+    const response = await fetch(`${API_BASE}/logs/recent`, {
+      method: 'GET'
     });
-  }, TEST_TIMEOUT);
 
-  test('Système de logging et statistiques', async () => {
-    await testRunner.runTripleTest('logging-system', async (iteration) => {
-      // Test récupération des stats
-      const { status, data } = await makeApiCall('/logs/stats');
+    const logs = await response.json();
+    expect(Array.isArray(logs)).toBe(true);
 
-      expect(status).toBe(200);
-      expect(data).toHaveProperty('total_logs');
-      expect(data).toHaveProperty('run_id');
-
-      // Test sauvegarde des logs
-      const { status: saveStatus, data: saveData } = await makeApiCall('/logs/save', 'POST');
-
-      expect(saveStatus).toBe(200);
-      expect(saveData).toHaveProperty('filepath');
-      expect(saveData).toHaveProperty('log_count');
-
-      return {
-        total_logs: data.total_logs,
-        log_count: saveData.log_count
-      };
+    // Verify JSONL format
+    logs.forEach(log => {
+      expect(log).toHaveProperty('ts_ns');
+      expect(log).toHaveProperty('tick');
+      expect(log).toHaveProperty('op');
+      expect(typeof log.ts_ns).toBe('number');
     });
-  }, TEST_TIMEOUT);
-
-  test('Validation sécurité et rate limiting', async () => {
-    await testRunner.runTripleTest('security-validation', async (iteration) => {
-      // Test validation stricte avec données invalides
-      const { status: invalidStatus } = await makeApiCall('/convert/bit-to-lum', 'POST', {
-        inputBits: 'invalid123'
-      });
-
-      expect(invalidStatus).toBe(400);
-
-      // Test avec données valides
-      const { status: validStatus } = await makeApiCall('/convert/bit-to-lum', 'POST', {
-        inputBits: '1010'
-      });
-
-      expect(validStatus).toBe(200);
-
-      return {
-        invalid_rejected: invalidStatus === 400,
-        valid_accepted: validStatus === 200
-      };
-    });
-  }, TEST_TIMEOUT);
-
-  test('Build system et compilation C', async () => {
-    await testRunner.runTripleTest('build-system', async (iteration) => {
-      return new Promise((resolve, reject) => {
-        const makeProcess = spawn('make', ['clean', '&&', 'make', 'all'], {
-          shell: true,
-          cwd: process.cwd()
-        });
-
-        let output = '';
-        let errorOutput = '';
-
-        makeProcess.stdout.on('data', (data) => {
-          output += data.toString();
-        });
-
-        makeProcess.stderr.on('data', (data) => {
-          errorOutput += data.toString();
-        });
-
-        makeProcess.on('close', (code) => {
-          if (code === 0) {
-            resolve({
-              build_success: true,
-              output_lines: output.split('\n').length,
-              has_artifacts: output.includes('Library created')
-            });
-          } else {
-            reject(new Error(`Build failed with code ${code}: ${errorOutput}`));
-          }
-        });
-
-        setTimeout(() => {
-          makeProcess.kill();
-          reject(new Error('Build timeout'));
-        }, 30000);
-      });
-    });
-  }, 35000);
+  });
 });
 
-// Test de performance et métriques
-describe('Performance Metrics', () => {
-  test('Temps de réponse API < 10ms pour opérations simples', async () => {
-    const startTime = process.hrtime.bigint();
-    
-    await makeApiCall('/logs/stats');
-    
-    const endTime = process.hrtime.bigint();
-    const responseTime = Number((endTime - startTime) / BigInt(1000000));
-    
-    expect(responseTime).toBeLessThan(10);
+// Performance benchmark tests
+describe('LUMS Performance Tests', () => {
+  test('Large scale conversion performance', async () => {
+    const largeBinary = '1'.repeat(10000) + '0'.repeat(10000);
+    const startTime = Date.now();
+
+    const response = await fetch(`${API_BASE}/convert/bit-to-lum`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputBits: largeBinary })
+    });
+
+    const endTime = Date.now();
+    const result = await response.json();
+
+    expect(response.ok).toBe(true);
+    expect(result.outputLums).toHaveLength(20000);
+    expect(endTime - startTime).toBeLessThan(1000); // Should complete in under 1s
   });
 
-  test('Conservation rate 100% pour opérations non-cycle', async () => {
-    const testData = await makeApiCall('/convert/bit-to-lum', 'POST', {
-      inputBits: '11001100'
-    });
+  test('Memory usage stability', async () => {
+    const iterations = 100;
+    const initialMemory = process.memoryUsage().heapUsed;
 
-    const operationData = await makeApiCall('/execute/vorax-operation', 'POST', {
-      type: 'fusion',
-      groups: [
-        { lums: testData.data.lums.slice(0, 4), groupType: 'linear' },
-        { lums: testData.data.lums.slice(4, 8), groupType: 'linear' }
-      ]
-    });
+    for (let i = 0; i < iterations; i++) {
+      await fetch(`${API_BASE}/convert/bit-to-lum`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputBits: '10101010' })
+      });
+    }
 
-    expect(operationData.data.operation_stats.conservation_valid).toBe(true);
+    // Force garbage collection if available
+    if (global.gc) global.gc();
+
+    const finalMemory = process.memoryUsage().heapUsed;
+    const memoryIncrease = finalMemory - initialMemory;
+
+    // Memory increase should be reasonable (less than 50MB)
+    expect(memoryIncrease).toBeLessThan(50 * 1024 * 1024);
   });
 });

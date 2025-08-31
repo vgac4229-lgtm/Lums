@@ -1,129 +1,234 @@
 
-import { LUMGroup } from "./types/lums";
+import { VIRInstruction } from "./services/vorax-compiler";
 import { logger } from "./services/logger";
 
-// V-IR Virtual Machine Implementation - Phase Moyen Terme
-export interface VIRInstruction {
-  opcode: VIROpcode;
-  operand1: number;
-  operand2: number;
-  operand3: number;
-  metadata?: any;
-}
-
-export enum VIROpcode {
-  NOP = 0x00,    // No operation
-  LOAD = 0x10,   // Load LUM group to register
-  STORE = 0x11,  // Store register to memory
-  FUSE = 0x20,   // Fusion operation
-  SPLIT = 0x21,  // Split operation  
-  CYCLE = 0x22,  // Cycle operation
-  FLOW = 0x23,   // Flow operation
-  JMP = 0x30,    // Unconditional jump
-  JZ = 0x31,     // Jump if zero
-  CALL = 0x40,   // Function call
-  RET = 0x41,    // Return
-  HALT = 0xFF    // Halt execution
-}
-
-export class VIRMachine {
-  private registers: LUMGroup[] = new Array(16);
-  private memory: Map<string, LUMGroup> = new Map();
+export class VoraxVM {
+  private zones: number[] = new Array(26).fill(0); // A-Z zones
+  private memory: number[] = new Array(10).fill(0); // Memory slots
   private stack: number[] = [];
-  private pc: number = 0;
+  private pc: number = 0; // Program counter
   private running: boolean = false;
+  private energyBudget: number = 1000;
+  private tickCount: number = 0;
 
-  execute(program: VIRInstruction[]): ExecutionResult {
+  constructor() {
+    this.reset();
+  }
+
+  reset(): void {
+    this.zones.fill(0);
+    this.memory.fill(0);
+    this.stack = [];
     this.pc = 0;
+    this.running = false;
+    this.energyBudget = 1000;
+    this.tickCount = 0;
+  }
+
+  execute(instructions: VIRInstruction[]): VoraxExecutionResult {
     this.running = true;
-    const trace: ExecutionTrace[] = [];
+    this.pc = 0;
+    const executionLog: VoraxTickLog[] = [];
 
-    while (this.running && this.pc < program.length) {
-      const instruction = program[this.pc];
-      const result = this.executeInstruction(instruction);
-      
-      trace.push({
-        pc: this.pc,
-        instruction,
-        result,
-        timestamp: process.hrtime.bigint()
-      });
+    try {
+      while (this.running && this.pc < instructions.length && this.energyBudget > 0) {
+        const instruction = instructions[this.pc];
+        const tickLog = this.executeInstruction(instruction);
+        executionLog.push(tickLog);
+        
+        this.pc++;
+        this.tickCount++;
+        this.energyBudget -= this.getInstructionCost(instruction);
 
-      if (!result.success) {
-        this.running = false;
-        return { success: false, error: result.error, trace };
+        // Log tick-by-tick execution
+        logger.logVoraxTick({
+          tick: this.tickCount,
+          instruction,
+          zones: [...this.zones],
+          memory: [...this.memory],
+          energy: this.energyBudget
+        });
       }
-
-      this.pc++;
+    } catch (error) {
+      logger.error('VM execution error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown VM error',
+        finalState: this.getState(),
+        executionLog
+      };
     }
 
-    return { success: true, trace };
+    return {
+      success: true,
+      finalState: this.getState(),
+      executionLog,
+      ticksExecuted: this.tickCount,
+      energyUsed: 1000 - this.energyBudget
+    };
   }
 
-  private executeInstruction(instruction: VIRInstruction): InstructionResult {
-    const { opcode, operand1, operand2, operand3 } = instruction;
-
-    switch (opcode) {
-      case VIROpcode.LOAD:
-        if (operand1 >= 16) return { success: false, error: 'Invalid register' };
-        const group = this.memory.get(`mem_${operand2}`);
-        if (!group) return { success: false, error: 'Memory not found' };
-        this.registers[operand1] = group;
-        return { success: true };
-
-      case VIROpcode.FUSE:
-        if (operand1 >= 16 || operand2 >= 16 || operand3 >= 16) {
-          return { success: false, error: 'Invalid register' };
-        }
-        const group1 = this.registers[operand1];
-        const group2 = this.registers[operand2];
-        if (!group1 || !group2) {
-          return { success: false, error: 'Empty registers' };
-        }
-        
-        // Perform fusion with conservation check
-        const fusedLums = [...group1.lums, ...group2.lums];
-        this.registers[operand3] = {
-          id: `fused_${Date.now()}`,
-          lums: fusedLums,
-          count: fusedLums.length,
-          groupType: 'cluster'
-        };
-        
-        // Log conservation
-        logger.logLumOperation('vm_fusion', 'vm', 
-          fusedLums.map((_, i) => `VM-L-${i}`),
-          group1.lums.length + group2.lums.length,
-          fusedLums.length,
-          { vm_instruction: true, conservation_valid: true }
-        );
-        return { success: true };
-
-      case VIROpcode.HALT:
+  private executeInstruction(instruction: VIRInstruction): VoraxTickLog {
+    const beforeState = this.getState();
+    
+    switch (instruction.opcode) {
+      case 0x10: // FUSE
+        this.executeFuse(instruction.operands[0], instruction.operands[1]);
+        break;
+      case 0x11: // SPLIT
+        this.executeSplit(instruction.operands[0], instruction.operands[1]);
+        break;
+      case 0x12: // MOVE
+        this.executeMove(instruction.operands[0], instruction.operands[1], instruction.operands[2]);
+        break;
+      case 0x13: // CYCLE
+        this.executeCycle(instruction.operands[0], instruction.operands[1]);
+        break;
+      case 0x14: // STORE
+        this.executeStore(instruction.operands[0], instruction.operands[1]);
+        break;
+      case 0x15: // RETRIEVE
+        this.executeRetrieve(instruction.operands[0], instruction.operands[1]);
+        break;
+      case 0x16: // COMPRESS
+        this.executeCompress(instruction.operands[0], instruction.metadata.cost || 5);
+        break;
+      case 0x17: // EXPAND
+        this.executeExpand(instruction.operands[0], instruction.operands[1]);
+        break;
+      case 0xFF: // HALT
         this.running = false;
-        return { success: true };
-
+        break;
       default:
-        return { success: false, error: `Unknown opcode: ${opcode}` };
+        logger.warn(`Unknown opcode: 0x${instruction.opcode.toString(16)}`);
     }
+
+    return {
+      tick: this.tickCount,
+      opcode: instruction.opcode,
+      beforeState,
+      afterState: this.getState(),
+      energyCost: this.getInstructionCost(instruction)
+    };
+  }
+
+  private executeFuse(zone1: number, zone2: number): void {
+    if (zone1 >= 0 && zone1 < this.zones.length && zone2 >= 0 && zone2 < this.zones.length) {
+      this.zones[zone1] += this.zones[zone2];
+      this.zones[zone2] = 0;
+    }
+  }
+
+  private executeSplit(zone: number, parts: number): void {
+    if (zone >= 0 && zone < this.zones.length && parts > 0) {
+      const value = this.zones[zone];
+      const perPart = Math.floor(value / parts);
+      const remainder = value % parts;
+      
+      this.zones[zone] = perPart + (remainder > 0 ? 1 : 0);
+      
+      // Distribute to next available zones
+      for (let i = 1; i < parts && zone + i < this.zones.length; i++) {
+        this.zones[zone + i] = perPart + (i < remainder ? 1 : 0);
+      }
+    }
+  }
+
+  private executeMove(srcZone: number, dstZone: number, amount: number): void {
+    if (srcZone >= 0 && srcZone < this.zones.length && 
+        dstZone >= 0 && dstZone < this.zones.length &&
+        this.zones[srcZone] >= amount) {
+      this.zones[srcZone] -= amount;
+      this.zones[dstZone] += amount;
+    }
+  }
+
+  private executeCycle(zone: number, modulo: number): void {
+    if (zone >= 0 && zone < this.zones.length && modulo > 0) {
+      this.zones[zone] = this.zones[zone] % modulo;
+    }
+  }
+
+  private executeStore(memorySlot: number, zone: number): void {
+    if (memorySlot >= 0 && memorySlot < this.memory.length &&
+        zone >= 0 && zone < this.zones.length) {
+      this.memory[memorySlot] = this.zones[zone];
+      this.zones[zone] = 0;
+    }
+  }
+
+  private executeRetrieve(memorySlot: number, zone: number): void {
+    if (memorySlot >= 0 && memorySlot < this.memory.length &&
+        zone >= 0 && zone < this.zones.length) {
+      this.zones[zone] = this.memory[memorySlot];
+      this.memory[memorySlot] = 0;
+    }
+  }
+
+  private executeCompress(zone: number, cost: number): void {
+    if (zone >= 0 && zone < this.zones.length && this.energyBudget >= cost) {
+      // Compress LUMs into Ω (omega) - represented as negative value
+      this.zones[zone] = -Math.abs(this.zones[zone]);
+      this.energyBudget -= cost;
+    }
+  }
+
+  private executeExpand(zone: number, factor: number): void {
+    if (zone >= 0 && zone < this.zones.length && factor > 0) {
+      // Expand Ω back to LUMs
+      if (this.zones[zone] < 0) {
+        this.zones[zone] = Math.abs(this.zones[zone]) * factor;
+      }
+    }
+  }
+
+  private getInstructionCost(instruction: VIRInstruction): number {
+    switch (instruction.opcode) {
+      case 0x10: case 0x11: case 0x12: case 0x13: // Basic operations
+        return 1;
+      case 0x14: case 0x15: // Memory operations
+        return 2;
+      case 0x16: // Compress
+        return instruction.metadata?.cost || 5;
+      case 0x17: // Expand
+        return 3;
+      default:
+        return 0;
+    }
+  }
+
+  private getState(): VoraxVMState {
+    return {
+      zones: [...this.zones],
+      memory: [...this.memory],
+      pc: this.pc,
+      energy: this.energyBudget,
+      ticks: this.tickCount
+    };
   }
 }
 
-interface ExecutionResult {
-  success: boolean;
-  error?: string;
-  trace: ExecutionTrace[];
-}
-
-interface ExecutionTrace {
+export interface VoraxVMState {
+  zones: number[];
+  memory: number[];
   pc: number;
-  instruction: VIRInstruction;
-  result: InstructionResult;
-  timestamp: bigint;
+  energy: number;
+  ticks: number;
 }
 
-interface InstructionResult {
+export interface VoraxTickLog {
+  tick: number;
+  opcode: number;
+  beforeState: VoraxVMState;
+  afterState: VoraxVMState;
+  energyCost: number;
+}
+
+export interface VoraxExecutionResult {
   success: boolean;
   error?: string;
+  finalState: VoraxVMState;
+  executionLog: VoraxTickLog[];
+  ticksExecuted?: number;
+  energyUsed?: number;
 }
-

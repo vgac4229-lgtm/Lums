@@ -1,89 +1,132 @@
-import { LogEntry } from "@shared/schema";
+import fs from 'fs';
+import path from 'path';
 
-export class VoraxLogger {
-  private logs: LogEntry[] = [];
-  private runId: string;
+interface LUMTraceEntry {
+  ts_ns: number;
+  tick: number;
+  tx_id: string;
+  op: string;
+  zone?: string;
+  lum_id?: string;
+  prev_count?: number;
+  added?: number;
+  removed?: number;
+  post_count?: number;
+  conservation_check?: boolean;
+  energy_cost?: number;
+}
+
+interface VoraxTickEntry {
+  tick: number;
+  instruction: any;
+  zones: number[];
+  memory: number[];
+  energy: number;
+}
+
+class LUMSLogger {
+  private logFile: string;
+  private recentLogs: LUMTraceEntry[] = [];
+  private maxRecentLogs = 1000;
 
   constructor() {
-    this.runId = `run-${Date.now()}`;
+    const logsDir = path.join(process.cwd(), 'logs');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    this.logFile = path.join(logsDir, `lums-${timestamp}.jsonl`);
   }
 
-  log(level: LogEntry['level'], message: string, data?: Record<string, any>): void {
-    const logEntry: LogEntry = {
-      level,
-      message,
-      timestamp: new Date().toISOString(),
-      data: {
-        ...data,
-        runId: this.runId,
-      },
+  private generateTxId(): string {
+    return Math.random().toString(36).substr(2, 9);
+  }
+
+  private getNanoTimestamp(): number {
+    const hrTime = process.hrtime();
+    return hrTime[0] * 1e9 + hrTime[1];
+  }
+
+  logLUMOperation(operation: string, zone: string, lumId: string, details: Partial<LUMTraceEntry> = {}): void {
+    const entry: LUMTraceEntry = {
+      ts_ns: this.getNanoTimestamp(),
+      tick: details.tick || 0,
+      tx_id: this.generateTxId(),
+      op: operation,
+      zone,
+      lum_id: lumId,
+      ...details
     };
 
-    this.logs.push(logEntry);
-    console.log(`[${level.toUpperCase()}] ${message}`, data || '');
+    // Write to JSONL file
+    const jsonLine = JSON.stringify(entry) + '\n';
+    fs.appendFileSync(this.logFile, jsonLine);
+
+    // Keep in memory for recent access
+    this.recentLogs.push(entry);
+    if (this.recentLogs.length > this.maxRecentLogs) {
+      this.recentLogs.shift();
+    }
   }
 
-  info(message: string, data?: Record<string, any>): void {
-    this.log('info', message, data);
+  logConservationCheck(before: number, after: number, operation: string, zone: string): void {
+    const isValid = before === after;
+    this.logLUMOperation('conservation_check', zone, 'system', {
+      prev_count: before,
+      post_count: after,
+      conservation_check: isValid,
+      op: operation
+    });
+
+    if (!isValid) {
+      this.error(`Conservation violation: ${operation} in ${zone}. Before: ${before}, After: ${after}`);
+    }
   }
 
-  success(message: string, data?: Record<string, any>): void {
-    this.log('success', message, data);
-  }
-
-  warning(message: string, data?: Record<string, any>): void {
-    this.log('warning', message, data);
-  }
-
-  error(message: string, data?: Record<string, any>): void {
-    this.log('error', message, data);
-  }
-
-  logLumOperation(
-    operation: string,
-    zone: string,
-    lumIds: string[],
-    beforeCount: number,
-    afterCount: number,
-    metadata?: Record<string, any>
-  ): void {
-    const conserved = beforeCount === afterCount || operation === 'cycle';
-    
-    this.log(conserved ? 'success' : 'error', `LUM operation: ${operation}`, {
-      operation,
-      zone,
-      lumIds,
-      beforeCount,
-      afterCount,
-      conserved,
-      ...metadata,
+  logVoraxTick(tickData: VoraxTickEntry): void {
+    this.logLUMOperation('vm_tick', 'system', 'vm', {
+      tick: tickData.tick,
+      energy_cost: tickData.energy,
+      op: `opcode_0x${tickData.instruction.opcode.toString(16)}`
     });
   }
 
-  getLogs(): LogEntry[] {
-    return [...this.logs];
+  getRecentLogs(limit: number = 100): LUMTraceEntry[] {
+    return this.recentLogs.slice(-limit);
   }
 
-  clearLogs(): void {
-    this.logs = [];
+  exportLogsToCSV(): string {
+    const headers = ['timestamp', 'tick', 'tx_id', 'operation', 'zone', 'lum_id', 'prev_count', 'post_count', 'conservation_valid'];
+    const csvData = this.recentLogs.map(log => [
+      new Date(log.ts_ns / 1e6).toISOString(),
+      log.tick,
+      log.tx_id,
+      log.op,
+      log.zone || '',
+      log.lum_id || '',
+      log.prev_count || '',
+      log.post_count || '',
+      log.conservation_check !== undefined ? log.conservation_check : ''
+    ]);
+
+    return [headers, ...csvData].map(row => row.join(',')).join('\n');
   }
 
-  getRunId(): string {
-    return this.runId;
+  info(message: string, ...args: any[]): void {
+    console.log(`[INFO] ${message}`, ...args);
+    this.logLUMOperation('info', 'system', 'logger', { op: message });
   }
 
-  getLogStats() {
-    return {
-      totalLogs: this.logs.length,
-      runId: this.runId,
-      levels: {
-        info: this.logs.filter(l => l.level === 'info').length,
-        success: this.logs.filter(l => l.level === 'success').length,
-        warning: this.logs.filter(l => l.level === 'warning').length,
-        error: this.logs.filter(l => l.level === 'error').length,
-      },
-    };
+  warn(message: string, ...args: any[]): void {
+    console.warn(`[WARN] ${message}`, ...args);
+    this.logLUMOperation('warn', 'system', 'logger', { op: message });
+  }
+
+  error(message: string, ...args: any[]): void {
+    console.error(`[ERROR] ${message}`, ...args);
+    this.logLUMOperation('error', 'system', 'logger', { op: message });
   }
 }
 
-export const logger = new VoraxLogger();
+export const logger = new LUMSLogger();

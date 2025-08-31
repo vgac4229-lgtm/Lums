@@ -1,168 +1,126 @@
-import { useState, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Zone, MemorySlot, LogEntry, ExecutionStep, ExecutionMetrics } from '@shared/schema';
-import { VoraxParser } from '@/lib/vorax-parser';
+import { useState, useEffect, useCallback } from 'react';
+import { VoraxEngineState, VoraxOperation } from '@shared/schema';
 
 export function useVoraxEngine() {
-  const queryClient = useQueryClient();
-  const [currentTick, setCurrentTick] = useState(0);
-  const [totalTicks, setTotalTicks] = useState(0);
-  const [isExecuting, setIsExecuting] = useState(false);
-
-  // Fetch current engine state
-  const { data: engineState } = useQuery({
-    queryKey: ['/api/vorax/state'],
-    queryFn: async () => {
-      const response = await fetch('/api/vorax/state');
-      if (!response.ok) throw new Error('Failed to fetch engine state');
-      return response.json();
-    },
-    refetchInterval: isExecuting ? 1000 : false,
+  const [engineState, setEngineState] = useState<VoraxEngineState>({
+    zones: {},
+    memory: {},
+    currentTick: 0,
+    energyBudget: 1000,
+    conservationValid: true
   });
 
-  const zones: Zone[] = engineState?.zones || [
-    { id: 'A', name: 'Zone A', lumCount: 0, bounds: { x: 0, y: 0, width: 100, height: 100 } },
-    { id: 'B', name: 'Zone B', lumCount: 0, bounds: { x: 0, y: 0, width: 100, height: 100 } },
-    { id: 'C', name: 'Zone C', lumCount: 0, bounds: { x: 0, y: 0, width: 100, height: 100 } },
-    { id: 'D', name: 'Zone D', lumCount: 0, bounds: { x: 0, y: 0, width: 100, height: 100 } },
-  ];
+  const [isConnected, setIsConnected] = useState(false);
 
-  const memory: MemorySlot[] = engineState?.memory || [
-    { id: 'buf', name: 'buf', lumCount: 0, timestamp: Date.now() },
-    { id: 'cache', name: 'cache', lumCount: 0, timestamp: Date.now() },
-  ];
+  useEffect(() => {
+    // Initialize connection to VORAX engine
+    checkConnection();
+  }, []);
 
-  const logs: LogEntry[] = engineState?.logs || [];
-  const executionSteps: ExecutionStep[] = engineState?.executionSteps || [];
-  const metrics: ExecutionMetrics = engineState?.metrics || {
-    executionTime: 0,
-    memoryUsage: 0,
-    lumOperations: 0,
-    ticksExecuted: 0,
-    totalTicks: 0,
-    violations: 0,
-    efficiency: 100,
-    conservationValid: true,
-    raceConditions: 0,
+  const checkConnection = async () => {
+    try {
+      const response = await fetch('/api/vorax/status');
+      setIsConnected(response.ok);
+
+      if (response.ok) {
+        const state = await response.json();
+        setEngineState(state);
+      }
+    } catch (error) {
+      setIsConnected(false);
+    }
   };
 
-  // Execute code mutation
-  const executeCodeMutation = useMutation({
-    mutationFn: async (code: string) => {
-      const parser = new VoraxParser();
-      const statements = parser.parse(code);
-      
-      const response = await fetch('/api/vorax/execute', {
+  const compileAndExecute = useCallback(async (code: string) => {
+    try {
+      // Compile VORAX-L code
+      const compileResponse = await fetch('/api/vorax/compile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, statements }),
+        body: JSON.stringify({ code })
       });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Execution failed');
-      }
-      
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setCurrentTick(data.currentTick || 0);
-      setTotalTicks(data.totalTicks || 0);
-      setIsExecuting(data.isExecuting || false);
-      queryClient.invalidateQueries({ queryKey: ['/api/vorax/state'] });
-    },
-  });
 
-  // Step execution mutation
-  const stepExecutionMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch('/api/vorax/step', {
+      const compileResult = await compileResponse.json();
+
+      if (!compileResult.success) {
+        throw new Error(compileResult.error);
+      }
+
+      // Execute compiled instructions
+      const executeResponse = await fetch('/api/vorax/execute', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          instructions: compileResult.instructions,
+          maxTicks: 100
+        })
       });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Step execution failed');
-      }
-      
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setCurrentTick(data.currentTick || 0);
-      queryClient.invalidateQueries({ queryKey: ['/api/vorax/state'] });
-    },
-  });
 
-  // Pause execution mutation
-  const pauseExecutionMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch('/api/vorax/pause', {
+      const executeResult = await executeResponse.json();
+
+      if (executeResult.success) {
+        setEngineState(prev => ({
+          ...prev,
+          currentTick: executeResult.ticksExecuted,
+          energyBudget: 1000 - executeResult.energyUsed
+        }));
+      }
+
+      return {
+        compilation: compileResult,
+        execution: executeResult
+      };
+    } catch (error) {
+      throw error;
+    }
+  }, []);
+
+  const executeOperation = useCallback(async (operation: VoraxOperation) => {
+    try {
+      const response = await fetch('/api/execute/vorax-operation', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operation })
       });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Pause execution failed');
-      }
-      
-      return response.json();
-    },
-    onSuccess: () => {
-      setIsExecuting(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/vorax/state'] });
-    },
-  });
 
-  // Reset execution mutation
-  const resetExecutionMutation = useMutation({
-    mutationFn: async () => {
+      const result = await response.json();
+
+      // Update local state
+      setEngineState(prev => ({
+        ...prev,
+        currentTick: prev.currentTick + 1
+      }));
+
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }, []);
+
+  const resetEngine = useCallback(async () => {
+    try {
       const response = await fetch('/api/vorax/reset', {
-        method: 'POST',
+        method: 'POST'
       });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Reset execution failed');
+
+      if (response.ok) {
+        const newState = await response.json();
+        setEngineState(newState);
       }
-      
-      return response.json();
-    },
-    onSuccess: () => {
-      setCurrentTick(0);
-      setTotalTicks(0);
-      setIsExecuting(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/vorax/state'] });
-    },
-  });
+    } catch (error) {
+      console.error('Failed to reset engine:', error);
+    }
+  }, []);
 
-  const executeCode = useCallback((code: string) => {
-    return executeCodeMutation.mutateAsync(code);
-  }, [executeCodeMutation]);
-
-  const stepExecution = useCallback(() => {
-    return stepExecutionMutation.mutateAsync();
-  }, [stepExecutionMutation]);
-
-  const pauseExecution = useCallback(() => {
-    return pauseExecutionMutation.mutateAsync();
-  }, [pauseExecutionMutation]);
-
-  const resetExecution = useCallback(() => {
-    return resetExecutionMutation.mutateAsync();
-  }, [resetExecutionMutation]);
+  const getEngineState = useCallback(() => engineState, [engineState]);
 
   return {
-    zones,
-    memory,
-    currentTick,
-    totalTicks,
-    isExecuting,
-    logs,
-    executionSteps,
-    metrics,
-    executeCode,
-    stepExecution,
-    pauseExecution,
-    resetExecution,
+    engine: engineState,
+    isConnected,
+    compileAndExecute,
+    executeOperation,
+    resetEngine,
+    getEngineState,
+    checkConnection
   };
 }

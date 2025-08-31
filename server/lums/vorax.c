@@ -566,3 +566,172 @@ void print_lum_group(LUMGroup* group) {
     }
     printf("\n");
 }
+
+
+// --- VORAX VM Implementation ---
+
+VoraxEngine* vorax_create_engine(void) {
+    VoraxEngine* engine = malloc(sizeof(VoraxEngine));
+    if (!engine) return NULL;
+
+    // Initialize zones
+    for (int i = 0; i < MAX_ZONES; i++) {
+        engine->zones[i] = NULL;
+        if (engine->zone_names[i]) {
+            free(engine->zone_names[i]);
+        }
+        char zone_name[16];
+        sprintf(zone_name, "Zone_%c", 'A' + i);
+        engine->zone_names[i] = strdup(zone_name);
+    }
+
+    engine->zone_count = 0;
+    engine->current_tick = 0;
+    engine->energy_budget = 1000.0;
+    memset(engine->error_message, 0, sizeof(engine->error_message));
+
+    return engine;
+}
+
+void vorax_destroy_engine(VoraxEngine* engine) {
+    if (!engine) return;
+
+    for (int i = 0; i < MAX_ZONES; i++) {
+        if (engine->zones[i]) {
+            if (engine->zones[i]->lums) {
+                free(engine->zones[i]->lums);
+            }
+            free(engine->zones[i]);
+        }
+        if (engine->zone_names[i]) {
+            free(engine->zone_names[i]);
+        }
+    }
+
+    free(engine);
+}
+
+int vorax_fuse_zones(VoraxEngine* engine, int zone1, int zone2) {
+    if (!engine || zone1 >= MAX_ZONES || zone2 >= MAX_ZONES) return -1;
+    if (!engine->zones[zone1] || !engine->zones[zone2]) return -1;
+
+    LUMGroup* g1 = engine->zones[zone1];
+    LUMGroup* g2 = engine->zones[zone2];
+
+    // Create fused group
+    size_t total_count = g1->count + g2->count;
+    LUM* fused_lums = malloc(sizeof(LUM) * total_count);
+    if (!fused_lums) return -1;
+
+    memcpy(fused_lums, g1->lums, sizeof(LUM) * g1->count);
+    memcpy(fused_lums + g1->count, g2->lums, sizeof(LUM) * g2->count);
+
+    // Update zone1 with fused result
+    free(g1->lums);
+    g1->lums = fused_lums;
+    g1->count = total_count;
+
+    // Clear zone2
+    free(g2->lums);
+    g2->lums = NULL;
+    g2->count = 0;
+
+    engine->current_tick++;
+    return 0;
+}
+
+int vorax_split_zone(VoraxEngine* engine, int zone, int parts) {
+    if (!engine || zone >= MAX_ZONES || parts <= 0) return -1;
+    if (!engine->zones[zone]) return -1;
+
+    LUMGroup* source = engine->zones[zone];
+    if (source->count == 0) return 0;
+
+    size_t lums_per_part = source->count / parts;
+    size_t remainder = source->count % parts;
+
+    // Keep first part in original zone
+    source->count = lums_per_part + (remainder > 0 ? 1 : 0);
+
+    // Create additional zones for remaining parts
+    for (int i = 1; i < parts && engine->zone_count < MAX_ZONES; i++) {
+        int new_zone_idx = engine->zone_count++;
+        engine->zones[new_zone_idx] = malloc(sizeof(LUMGroup));
+        if (!engine->zones[new_zone_idx]) return -1;
+
+        size_t part_size = lums_per_part + (i < remainder ? 1 : 0);
+        engine->zones[new_zone_idx]->lums = malloc(sizeof(LUM) * part_size);
+        engine->zones[new_zone_idx]->count = part_size;
+
+        // Copy LUMs to new zone
+        size_t src_offset = lums_per_part + (remainder > 0 ? 1 : 0) + (i - 1) * lums_per_part;
+        memcpy(engine->zones[new_zone_idx]->lums, 
+               source->lums + src_offset, 
+               sizeof(LUM) * part_size);
+    }
+
+    engine->current_tick++;
+    return 0;
+}
+
+int vorax_cycle_zone(VoraxEngine* engine, int zone, int modulo) {
+    if (!engine || zone >= MAX_ZONES || modulo <= 0) return -1;
+    if (!engine->zones[zone]) return -1;
+
+    LUMGroup* group = engine->zones[zone];
+    size_t new_count = group->count % modulo;
+
+    if (new_count < group->count) {
+        // Shrink group
+        LUM* new_lums = malloc(sizeof(LUM) * new_count);
+        if (!new_lums && new_count > 0) return -1;
+
+        if (new_count > 0) {
+            memcpy(new_lums, group->lums, sizeof(LUM) * new_count);
+        }
+
+        free(group->lums);
+        group->lums = new_lums;
+        group->count = new_count;
+    }
+
+    engine->current_tick++;
+    return 0;
+}
+
+// Bootstrap sequence implementation
+int vorax_bootstrap_phase1(void) {
+    printf("VORAX Bootstrap Phase 1: Initializing core primitives...\n");
+    // Initialize LUM primitives
+    return 0;
+}
+
+int vorax_bootstrap_phase2(void) {
+    printf("VORAX Bootstrap Phase 2: Loading assembler definitions...\n");
+    // Load primitive operations in assembly
+    return 0;
+}
+
+int vorax_bootstrap_phase3(void) {
+    printf("VORAX Bootstrap Phase 3: Compiling bit→LUM encoder...\n");
+    // Compile encoder/decoder
+    return 0;
+}
+
+int vorax_bootstrap_phase4(void) {
+    printf("VORAX Bootstrap Phase 4: Initializing VM...\n");
+    // Initialize VORAX VM
+    return 0;
+}
+
+int vorax_bootstrap_phase5(void) {
+    printf("VORAX Bootstrap Phase 5: Starting console server...\n");
+    // Start console interface
+    return 0;
+}
+
+int vorax_bootstrap_phase6(void) {
+    printf("VORAX Bootstrap Phase 6: Compiling VORAX-L...\n");
+    // Compile VORAX-L language
+    return 0;
+}

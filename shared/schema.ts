@@ -103,3 +103,37 @@ export interface User {
   username: string;
   password: string;
 }
+
+// Adding new types and interfaces as per the request
+export interface LUMGroup {
+  id: string;
+  lums: LUM[];
+}
+
+export interface VoraxOperation {
+  type: string;
+  name: 'fusion' | 'split' | 'cycle' | 'flow' | 'compress' | 'expand' | 'store' | 'retrieve';
+  groups?: LUMGroup[];
+  parameters?: {
+    zones?: number;
+    modulo?: number;
+    targetZone?: string;
+    cost?: number;
+    factor?: number;
+    memorySlot?: string;
+  };
+}
+
+export interface VoraxEngineState {
+  zones: Record<string, Zone>;
+  memory: Record<string, MemorySlot>;
+  currentTick: number;
+  energyBudget: number;
+  conservationValid: boolean;
+}
+
+export interface LinearTypeChecker {
+  checkConservation(before: LUMGroup[], after: LUMGroup[]): boolean;
+  validateOperation(operation: VoraxOperation): boolean;
+  trackResourceUsage(lumId: string, operation: string): void;
+}
