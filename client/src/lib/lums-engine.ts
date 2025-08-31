@@ -126,13 +126,28 @@ export class LumsEngine {
     }
   }
 
-  // Validation
+  // Validation complète
   validateLum(lum: LUM): boolean {
-    return (
-      typeof lum.presence === 'number' &&
-      lum.presence >= 0 &&
-      lum.presence <= 1 &&
-      ['linear', 'group', 'node', 'cycle'].includes(lum.structureType)
+    // Validation stricte de la présence
+    if (typeof lum.presence !== 'number' || (lum.presence !== 0 && lum.presence !== 1)) {
+      return false;
+    }
+    
+    // Validation du type de structure
+    if (!['linear', 'group', 'node', 'cycle'].includes(lum.structureType)) {
+      return false;
+    }
+    
+    // Validation de la position
+    if (!lum.position || 
+        typeof lum.position.x !== 'number' || 
+        typeof lum.position.y !== 'number' ||
+        lum.position.x < -10000 || lum.position.x > 10000 ||
+        lum.position.y < -10000 || lum.position.y > 10000) {
+      return false;
+    }
+    
+    return true;
     );
   }
 

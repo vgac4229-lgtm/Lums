@@ -502,13 +502,24 @@ LUMGroup* create_lum_group(LUM* lums, size_t count, GroupType type) {
     group->connection_count = 0;
     group->spatial_data = NULL;
 
-    // Generate unique ID
-    group->id = (char*)malloc(32);
+    // Generate truly unique ID using UUID v4 algorithm
+    group->id = (char*)malloc(37); // UUID standard length + null terminator
     if (group->id) {
-        // Use current time and a random number for a pseudo-unique ID
-        snprintf(group->id, 32, "group_%ld_%d", time(NULL), rand() % 1000);
-    } else {
-        // Handle allocation failure for ID if necessary
+        // Generate UUID v4 with proper randomness
+        uint8_t uuid_bytes[16];
+        for (int i = 0; i < 16; i++) {
+            uuid_bytes[i] = rand() % 256;
+        }
+        
+        // Set version (4) and variant bits
+        uuid_bytes[6] = (uuid_bytes[6] & 0x0F) | 0x40; // Version 4
+        uuid_bytes[8] = (uuid_bytes[8] & 0x3F) | 0x80; // Variant 10
+        
+        snprintf(group->id, 37, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+                uuid_bytes[0], uuid_bytes[1], uuid_bytes[2], uuid_bytes[3],
+                uuid_bytes[4], uuid_bytes[5], uuid_bytes[6], uuid_bytes[7],
+                uuid_bytes[8], uuid_bytes[9], uuid_bytes[10], uuid_bytes[11],
+                uuid_bytes[12], uuid_bytes[13], uuid_bytes[14], uuid_bytes[15]);
     }
 
     return group;

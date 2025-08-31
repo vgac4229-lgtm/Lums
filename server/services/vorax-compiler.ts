@@ -17,6 +17,92 @@ export class VoraxCompiler {
     FUSE: 0x10,
     SPLIT: 0x11,
     MOVE: 0x12,
+
+
+  private tokenizeLine(line: string): string[] {
+    const tokens: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    let inParens = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"' && !inParens) {
+        inQuotes = !inQuotes;
+        continue;
+      }
+      
+      if (char === '(' && !inQuotes) {
+        inParens = true;
+        current += char;
+        continue;
+      }
+      
+      if (char === ')' && !inQuotes) {
+        inParens = false;
+        current += char;
+        continue;
+      }
+      
+      if ((char === ' ' || char === '\t') && !inQuotes && !inParens) {
+        if (current.trim()) {
+          tokens.push(current.trim());
+          current = '';
+        }
+      } else {
+        current += char;
+      }
+    }
+    
+    if (current.trim()) {
+      tokens.push(current.trim());
+    }
+    
+    return tokens;
+  }
+
+  private parseExpression(expr: string): number {
+    // Parse des expressions arithmétiques simples
+    expr = expr.trim();
+    
+    // Support des parenthèses
+    if (expr.startsWith('(') && expr.endsWith(')')) {
+      return this.parseExpression(expr.slice(1, -1));
+    }
+    
+    // Support des opérations de base
+    const addMatch = expr.match(/^(.+)\+(.+)$/);
+    if (addMatch) {
+      return this.parseExpression(addMatch[1]) + this.parseExpression(addMatch[2]);
+    }
+    
+    const subMatch = expr.match(/^(.+)\-(.+)$/);
+    if (subMatch) {
+      return this.parseExpression(subMatch[1]) - this.parseExpression(subMatch[2]);
+    }
+    
+    const mulMatch = expr.match(/^(.+)\*(.+)$/);
+    if (mulMatch) {
+      return this.parseExpression(mulMatch[1]) * this.parseExpression(mulMatch[2]);
+    }
+    
+    const divMatch = expr.match(/^(.+)\/(.+)$/);
+    if (divMatch) {
+      const denominator = this.parseExpression(divMatch[2]);
+      if (denominator === 0) throw new Error('Division by zero');
+      return Math.floor(this.parseExpression(divMatch[1]) / denominator);
+    }
+    
+    // Nombres littéraux
+    const num = parseInt(expr);
+    if (!isNaN(num)) {
+      return num;
+    }
+    
+    throw new Error(`Cannot parse expression: ${expr}`);
+  }
+
     CYCLE: 0x13,
     STORE: 0x14,
     RETRIEVE: 0x15,
@@ -57,7 +143,10 @@ export class VoraxCompiler {
   }
 
   private compileLine(line: string): void {
-    const tokens = line.split(/\s+/);
+    // Tokenisation avancée avec support des expressions
+    const tokens = this.tokenizeLine(line);
+    if (tokens.length === 0) return;
+    
     const command = tokens[0].toLowerCase();
 
     switch (command) {
@@ -123,11 +212,43 @@ export class VoraxCompiler {
   }
 
   private parseZone(zoneName: string): number {
-    return zoneName.charCodeAt(0) - 65; // A=0, B=1, etc.
+    // Parsing réel des noms de zones
+    const zonePattern = /^Zone_([A-Z]+)$/i;
+    const match = zoneName.match(zonePattern);
+    if (match) {
+      let result = 0;
+      const letters = match[1].toUpperCase();
+      for (let i = 0; i < letters.length; i++) {
+        result = result * 26 + (letters.charCodeAt(i) - 65 + 1);
+      }
+      return result - 1; // 0-indexed
+    }
+    
+    // Fallback pour noms simples A, B, C...
+    if (zoneName.length === 1 && /[A-Z]/i.test(zoneName)) {
+      return zoneName.toUpperCase().charCodeAt(0) - 65;
+    }
+    
+    throw new Error(`Invalid zone name: ${zoneName}`);
   }
 
   private parseMemory(memName: string): number {
-    return memName.length; // Simple hash for memory slots
+    // Parsing réel des adresses mémoire
+    const memPattern = /^#([A-Za-z0-9_]+)$/;
+    const match = memName.match(memPattern);
+    if (match) {
+      // Hash CRC32 simplifié pour les noms de mémoire
+      let hash = 0;
+      const name = match[1];
+      for (let i = 0; i < name.length; i++) {
+        const char = name.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+      }
+      return Math.abs(hash) % 256; // Limité à 256 slots mémoire
+    }
+    
+    throw new Error(`Invalid memory name: ${memName}`);
   }
 
   generateCCode(instructions: VIRInstruction[]): string {

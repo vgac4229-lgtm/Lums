@@ -147,11 +147,32 @@ int validate_lums(LUM* lums, size_t count) {
     }
 
     for (size_t i = 0; i < count; i++) {
-        if (lums[i].presence > 1) {
-            return 0; // Invalid presence value
+        // Validation stricte de la présence
+        if (lums[i].presence != 0 && lums[i].presence != 1) {
+            return 0; // Invalid presence value - must be exactly 0 or 1
         }
-        if (lums[i].structure_type > LUM_CYCLE) {
+        
+        // Validation du type de structure
+        if (lums[i].structure_type < LUM_LINEAR || lums[i].structure_type > LUM_CYCLE) {
             return 0; // Invalid structure type
+        }
+        
+        // Validation des positions spatiales
+        if (lums[i].position.x < -10000 || lums[i].position.x > 10000 ||
+            lums[i].position.y < -10000 || lums[i].position.y > 10000) {
+            return 0; // Position out of valid range
+        }
+        
+        // Validation de cohérence : vérifier les contraintes entre LUMs adjacents
+        if (i > 0) {
+            // Distance minimale entre LUMs pour éviter les overlaps
+            int dx = lums[i].position.x - lums[i-1].position.x;
+            int dy = lums[i].position.y - lums[i-1].position.y;
+            int distance_sq = dx*dx + dy*dy;
+            
+            if (distance_sq < 100) { // Distance minimale de 10 unités
+                return 0; // LUMs too close together
+            }
         }
     }
 

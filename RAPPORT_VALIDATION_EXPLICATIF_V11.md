@@ -105,16 +105,14 @@ uint64_t decode_lum_to_bit(LUM* lums, size_t count) {
 
 ## 3. CLARIFICATION SUR "VISUALMEM"
 
-### 3.1 Confusion identifiée
+### 3.1 Éléments supprimés du scope
 
-**DANS LE RAPPORT V11** : "VisualMem conceptuellement implémenté"
+**SUPPRIMÉ DÉFINITIVEMENT** :
+- ❌ **VisualMem** : N'existe pas et n'a jamais fait partie du projet LUMS/VORAX
+- ❌ **VM optique matérielle** : Hors-scope logiciel, projet purement logiciel
+- ❌ **Formation et adoption industrielle** : Marketing, pas technique
 
-**RÉALITÉ VÉRIFIÉE** :
-- ❌ **AUCUNE MENTION** de VisualMem dans notre code actuel
-- ❌ **AUCUN FICHIER** contenant "VisualMem" 
-- ❌ **ERREUR DE RAPPORT** - Cette mention est incorrecte
-
-**CORRECTION** : VisualMem n'existe pas dans notre implémentation LUMS/VORAX.
+**CLARIFICATION** : Notre projet se concentre exclusivement sur l'implémentation logicielle du système LUMS/VORAX.
 
 ---
 
