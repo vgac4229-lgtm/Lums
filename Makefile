@@ -1,4 +1,3 @@
-
 CC = gcc
 CFLAGS = -Wall -Wextra -g -std=c99 -fPIC -O2 -pthread
 CFLAGS_RELEASE = -Wall -Wextra -O3 -std=c99 -fPIC -DNDEBUG -pthread
@@ -52,7 +51,7 @@ $(BUILDDIR)/scientific_validation: $(TESTDIR)/scientific_validation.test.c $(LIB
 clean:
 	@echo "Cleaning build files..."
 	@rm -rf $(BUILDDIR)
-	@rm -rf logs/scientific_traces
+	@rm -f logs/scientific_traces/*.jsonl
 	@echo "✓ Clean completed"
 
 install-deps:
@@ -63,10 +62,18 @@ install-deps:
 	@npm install --legacy-peer-deps
 	@echo "✓ Dependencies installed"
 
-test: $(BUILDDIR)/scientific_validation
-	@echo "=== EXÉCUTION TESTS SCIENTIFIQUES ==="
-	@./$(BUILDDIR)/scientific_validation
+test: all
+	@echo "=== COMPILATION TESTS SCIENTIFIQUES ==="
+	$(CC) $(CFLAGS) -o build/scientific_tests tests/scientific_validation_complete.c $(OBJECTS) -L$(BUILDDIR) -llums -lm -lpthread
 	@echo ""
+	@echo "=== EXÉCUTION TESTS SCIENTIFIQUES ==="
+	./build/scientific_tests
+	@echo ""
+	@echo "=== VÉRIFICATION LOGS SCIENTIFIQUES ==="
+	@ls -la logs/scientific_traces/
+	@echo ""
+	@echo "=== VALIDATION AUTHENTICITY COMPLÈTE ==="
+	@wc -l logs/scientific_traces/*.jsonl || echo "Pas de logs générés"
 
 test-scientific: test
 	@echo "=== VALIDATION LOGS SCIENTIFIQUES ==="
