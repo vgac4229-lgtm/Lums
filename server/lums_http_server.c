@@ -1,5 +1,4 @@
 
-#include "lums/lums_backend.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,317 +9,484 @@
 #include <signal.h>
 #include <errno.h>
 #include <time.h>
+#include <sys/time.h>
+#include <cjson/cJSON.h>
+#include "lums/lums_backend.h"
 
+// Configuration serveur
 #define PORT 8080
-#define BUFFER_SIZE 4096
 #define MAX_CLIENTS 100
+#define BUFFER_SIZE 8192
+#define MAX_RESPONSE_SIZE 16384
 
-// Variables globales pour le serveur
-static int server_running = 1;
-static int server_socket = -1;
-static pthread_t client_threads[MAX_CLIENTS];
-static int active_clients = 0;
-static pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-// Structure pour passer les données aux threads clients
+// Structure client
 typedef struct {
-    int socket;
+    int socket_fd;
     struct sockaddr_in address;
-    int thread_id;
-} client_data_t;
+    pthread_t thread_id;
+    time_t connection_time;
+    uint64_t request_id;
+} ClientConnection;
 
-// Gestionnaire de signal pour arrêt propre
+// Variables globales serveur
+static int server_fd = -1;
+static volatile int server_running = 0;
+static pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+static ClientConnection active_clients[MAX_CLIENTS];
+static int client_count = 0;
+static uint64_t total_requests = 0;
+
+// === GESTION SIGNAUX ===
+
 void signal_handler(int signal) {
-    printf("\n🛑 Signal %d reçu, arrêt du serveur...\n", signal);
+    printf("\n🛑 Signal %d reçu - Arrêt du serveur...\n", signal);
     server_running = 0;
-    if (server_socket != -1) {
-        close(server_socket);
+    
+    if (server_fd != -1) {
+        close(server_fd);
+        server_fd = -1;
     }
+    
+    lums_backend_cleanup();
+    exit(0);
 }
 
-// Fonction pour envoyer une réponse HTTP
-void send_http_response(int client_socket, int status_code, const char* content_type, const char* body) {
-    char response[BUFFER_SIZE * 2];
-    char* status_text = "OK";
+// === UTILITAIRES HTTP ===
+
+void send_http_response(int client_fd, int status_code, const char* content_type, const char* body) {
+    char response[MAX_RESPONSE_SIZE];
+    const char* status_text;
     
     switch (status_code) {
         case 200: status_text = "OK"; break;
         case 400: status_text = "Bad Request"; break;
         case 404: status_text = "Not Found"; break;
         case 500: status_text = "Internal Server Error"; break;
+        default: status_text = "Unknown"; break;
     }
     
-    snprintf(response, sizeof(response),
+    time_t now = time(NULL);
+    struct tm* gmt = gmtime(&now);
+    char date_str[100];
+    strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT", gmt);
+    
+    int content_length = body ? strlen(body) : 0;
+    
+    int header_len = snprintf(response, sizeof(response),
         "HTTP/1.1 %d %s\r\n"
         "Content-Type: %s\r\n"
+        "Content-Length: %d\r\n"
+        "Date: %s\r\n"
+        "Server: LUMS-HTTP/2.0\r\n"
         "Access-Control-Allow-Origin: *\r\n"
         "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
         "Access-Control-Allow-Headers: Content-Type\r\n"
-        "Content-Length: %zu\r\n"
         "Connection: close\r\n"
-        "\r\n"
-        "%s",
-        status_code, status_text, content_type, strlen(body), body
+        "\r\n",
+        status_code, status_text, content_type, content_length, date_str
     );
     
-    send(client_socket, response, strlen(response), 0);
+    send(client_fd, response, header_len, 0);
+    
+    if (body && content_length > 0) {
+        send(client_fd, body, content_length, 0);
+    }
 }
 
-// Traitement des requêtes API
-void handle_api_request(int client_socket, const char* method, const char* path, const char* body) {
-    char json_response[2048];
+void send_json_response(int client_fd, int status_code, cJSON* json) {
+    char* json_string = cJSON_Print(json);
+    if (json_string) {
+        send_http_response(client_fd, status_code, "application/json", json_string);
+        free(json_string);
+    } else {
+        send_http_response(client_fd, 500, "application/json", "{\"error\":\"JSON serialization failed\"}");
+    }
+}
+
+// === HANDLERS API ===
+
+void handle_api_status(int client_fd, uint64_t request_id) {
+    cJSON* response = cJSON_CreateObject();
+    
+    cJSON_AddStringToObject(response, "status", "operational");
+    cJSON_AddStringToObject(response, "backend", "LUMS/VORAX");
+    cJSON_AddStringToObject(response, "version", "2.1-scientific");
+    cJSON_AddNumberToObject(response, "timestamp", time(NULL));
+    cJSON_AddNumberToObject(response, "request_id", request_id);
+    cJSON_AddNumberToObject(response, "total_requests", total_requests);
+    cJSON_AddNumberToObject(response, "computations", lums_backend_get_total_computations());
+    cJSON_AddNumberToObject(response, "energy_consumed", lums_backend_get_energy_consumed());
+    cJSON_AddStringToObject(response, "backend_status", lums_backend_get_status());
+    
+    // Métriques système
+    cJSON* metrics = cJSON_CreateObject();
+    pthread_mutex_lock(&clients_mutex);
+    cJSON_AddNumberToObject(metrics, "active_clients", client_count);
+    pthread_mutex_unlock(&clients_mutex);
+    cJSON_AddNumberToObject(metrics, "max_clients", MAX_CLIENTS);
+    cJSON_AddItemToObject(response, "metrics", metrics);
+    
+    send_json_response(client_fd, 200, response);
+    cJSON_Delete(response);
+}
+
+void handle_api_fusion(int client_fd, const char* body, uint64_t request_id) {
+    cJSON* json = cJSON_Parse(body);
+    if (!json) {
+        send_http_response(client_fd, 400, "application/json", "{\"error\":\"Invalid JSON\"}");
+        return;
+    }
+    
+    cJSON* lum_a_json = cJSON_GetObjectItem(json, "lum_a");
+    cJSON* lum_b_json = cJSON_GetObjectItem(json, "lum_b");
+    
+    if (!cJSON_IsNumber(lum_a_json) || !cJSON_IsNumber(lum_b_json)) {
+        cJSON_Delete(json);
+        send_http_response(client_fd, 400, "application/json", "{\"error\":\"Missing or invalid lum_a/lum_b\"}");
+        return;
+    }
+    
+    uint64_t lum_a = (uint64_t)lum_a_json->valuedouble;
+    uint64_t lum_b = (uint64_t)lum_b_json->valuedouble;
+    uint64_t result;
+    
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+    
+    int status = lums_compute_fusion_real(lum_a, lum_b, &result);
+    
+    gettimeofday(&end, NULL);
+    double execution_time = (end.tv_sec - start.tv_sec) * 1000.0 + 
+                           (end.tv_usec - start.tv_usec) / 1000.0;
+    
+    cJSON* response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "request_id", request_id);
+    
+    if (status == 0) {
+        cJSON_AddStringToObject(response, "status", "success");
+        cJSON_AddNumberToObject(response, "result", result);
+        cJSON_AddNumberToObject(response, "result_hex", result);
+        cJSON_AddNumberToObject(response, "input_a", lum_a);
+        cJSON_AddNumberToObject(response, "input_b", lum_b);
+        cJSON_AddNumberToObject(response, "lums_a", __builtin_popcountll(lum_a));
+        cJSON_AddNumberToObject(response, "lums_b", __builtin_popcountll(lum_b));
+        cJSON_AddNumberToObject(response, "lums_result", __builtin_popcountll(result));
+        cJSON_AddNumberToObject(response, "execution_time_ms", execution_time);
+        cJSON_AddBoolToObject(response, "conservation_valid", 
+                             __builtin_popcountll(result) <= __builtin_popcountll(lum_a) + __builtin_popcountll(lum_b));
+    } else {
+        cJSON_AddStringToObject(response, "status", "error");
+        cJSON_AddNumberToObject(response, "error_code", status);
+        cJSON_AddStringToObject(response, "error_message", 
+                               status == -2 ? "Conservation violation" : "Invalid parameters");
+    }
+    
+    send_json_response(client_fd, status == 0 ? 200 : 400, response);
+    cJSON_Delete(response);
+    cJSON_Delete(json);
+}
+
+void handle_api_sqrt(int client_fd, const char* body, uint64_t request_id) {
+    cJSON* json = cJSON_Parse(body);
+    if (!json) {
+        send_http_response(client_fd, 400, "application/json", "{\"error\":\"Invalid JSON\"}");
+        return;
+    }
+    
+    cJSON* input_json = cJSON_GetObjectItem(json, "input");
+    if (!cJSON_IsNumber(input_json)) {
+        cJSON_Delete(json);
+        send_http_response(client_fd, 400, "application/json", "{\"error\":\"Missing or invalid input\"}");
+        return;
+    }
+    
+    double input = input_json->valuedouble;
+    
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+    
+    double result = lums_compute_sqrt_via_lums(input);
+    
+    gettimeofday(&end, NULL);
+    double execution_time = (end.tv_sec - start.tv_sec) * 1000.0 + 
+                           (end.tv_usec - start.tv_usec) / 1000.0;
+    
+    cJSON* response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "request_id", request_id);
+    
+    if (result >= 0) {
+        cJSON_AddStringToObject(response, "status", "success");
+        cJSON_AddNumberToObject(response, "input", input);
+        cJSON_AddNumberToObject(response, "result", result);
+        cJSON_AddNumberToObject(response, "execution_time_ms", execution_time);
+        cJSON_AddNumberToObject(response, "precision_error", fabs(result * result - input));
+        cJSON_AddStringToObject(response, "method", "Newton-Raphson with LUM simulation");
+    } else {
+        cJSON_AddStringToObject(response, "status", "error");
+        cJSON_AddStringToObject(response, "error_message", "Invalid input (negative number)");
+    }
+    
+    send_json_response(client_fd, result >= 0 ? 200 : 400, response);
+    cJSON_Delete(response);
+    cJSON_Delete(json);
+}
+
+void handle_api_prime(int client_fd, const char* body, uint64_t request_id) {
+    cJSON* json = cJSON_Parse(body);
+    if (!json) {
+        send_http_response(client_fd, 400, "application/json", "{\"error\":\"Invalid JSON\"}");
+        return;
+    }
+    
+    cJSON* number_json = cJSON_GetObjectItem(json, "number");
+    if (!cJSON_IsNumber(number_json)) {
+        cJSON_Delete(json);
+        send_http_response(client_fd, 400, "application/json", "{\"error\":\"Missing or invalid number\"}");
+        return;
+    }
+    
+    int number = (int)number_json->valuedouble;
+    
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+    
+    int is_prime = lums_test_prime_real(number);
+    
+    gettimeofday(&end, NULL);
+    double execution_time = (end.tv_sec - start.tv_sec) * 1000.0 + 
+                           (end.tv_usec - start.tv_usec) / 1000.0;
+    
+    cJSON* response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "request_id", request_id);
+    cJSON_AddNumberToObject(response, "number", number);
+    cJSON_AddBoolToObject(response, "is_prime", is_prime == 1);
+    cJSON_AddNumberToObject(response, "execution_time_ms", execution_time);
+    cJSON_AddStringToObject(response, "method", "Trial division with LUM simulation");
+    
+    if (number >= 2) {
+        cJSON_AddNumberToObject(response, "max_divisor_tested", (int)sqrt(number));
+    }
+    
+    send_json_response(client_fd, 200, response);
+    cJSON_Delete(response);
+    cJSON_Delete(json);
+}
+
+// === ROUTEUR PRINCIPAL ===
+
+void route_request(int client_fd, const char* method, const char* path, const char* body, uint64_t request_id) {
+    printf("📥 [%lu] %s %s\n", request_id, method, path);
     
     if (strcmp(method, "OPTIONS") == 0) {
-        send_http_response(client_socket, 200, "text/plain", "");
+        send_http_response(client_fd, 200, "text/plain", "");
         return;
     }
     
-    if (strcmp(path, "/api/status") == 0) {
-        snprintf(json_response, sizeof(json_response),
-            "{"
-            "\"status\":\"operational\","
-            "\"backend\":\"LUMS/VORAX\","
-            "\"version\":\"2.0\","
-            "\"timestamp\":%ld,"
-            "\"computations\":%lu,"
-            "\"energy_consumed\":%lu"
-            "}",
-            time(NULL),
-            lums_backend_get_total_computations(),
-            lums_backend_get_energy_consumed()
-        );
-        send_http_response(client_socket, 200, "application/json", json_response);
-        
+    if (strcmp(path, "/api/status") == 0 && strcmp(method, "GET") == 0) {
+        handle_api_status(client_fd, request_id);
     } else if (strcmp(path, "/api/fusion") == 0 && strcmp(method, "POST") == 0) {
-        // Parse les paramètres de fusion depuis le body JSON
-        uint64_t value1 = 0b11010;  // Valeur par défaut
-        uint64_t value2 = 0b1100;   // Valeur par défaut
-        uint64_t result;
-        
-        if (lums_compute_fusion_real(value1, value2, &result) == 0) {
-            snprintf(json_response, sizeof(json_response),
-                "{"
-                "\"success\":true,"
-                "\"operation\":\"fusion\","
-                "\"input1\":%lu,"
-                "\"input2\":%lu,"
-                "\"result\":%lu,"
-                "\"lum_count\":%d"
-                "}",
-                value1, value2, result, __builtin_popcountll(result)
-            );
-            send_http_response(client_socket, 200, "application/json", json_response);
-        } else {
-            send_http_response(client_socket, 500, "application/json", 
-                "{\"success\":false,\"error\":\"Fusion failed\"}");
-        }
-        
+        handle_api_fusion(client_fd, body, request_id);
     } else if (strcmp(path, "/api/sqrt") == 0 && strcmp(method, "POST") == 0) {
-        double input = 16.0;  // Valeur par défaut
-        double result = lums_compute_sqrt_via_lums(input);
-        
-        snprintf(json_response, sizeof(json_response),
-            "{"
-            "\"success\":true,"
-            "\"operation\":\"sqrt\","
-            "\"input\":%.6f,"
-            "\"result\":%.6f,"
-            "\"method\":\"LUM_electromechanical\""
-            "}",
-            input, result
-        );
-        send_http_response(client_socket, 200, "application/json", json_response);
-        
+        handle_api_sqrt(client_fd, body, request_id);
     } else if (strcmp(path, "/api/prime") == 0 && strcmp(method, "POST") == 0) {
-        int number = 17;  // Valeur par défaut
-        int is_prime = lums_test_prime_real(number);
-        
-        snprintf(json_response, sizeof(json_response),
-            "{"
-            "\"success\":true,"
-            "\"operation\":\"prime_test\","
-            "\"number\":%d,"
-            "\"is_prime\":%s,"
-            "\"method\":\"LUM_division_test\""
-            "}",
-            number, is_prime ? "true" : "false"
-        );
-        send_http_response(client_socket, 200, "application/json", json_response);
-        
+        handle_api_prime(client_fd, body, request_id);
     } else {
-        send_http_response(client_socket, 404, "application/json", 
-            "{\"error\":\"Endpoint not found\"}");
+        cJSON* error = cJSON_CreateObject();
+        cJSON_AddStringToObject(error, "error", "Endpoint not found");
+        cJSON_AddStringToObject(error, "method", method);
+        cJSON_AddStringToObject(error, "path", path);
+        cJSON_AddNumberToObject(error, "request_id", request_id);
+        send_json_response(client_fd, 404, error);
+        cJSON_Delete(error);
     }
 }
 
-// Fonction pour traiter une requête HTTP
-void process_http_request(int client_socket, const char* request) {
-    char method[16], path[256], version[16];
-    char* body_start = strstr(request, "\r\n\r\n");
-    char* body = body_start ? body_start + 4 : "";
-    
-    if (sscanf(request, "%15s %255s %15s", method, path, version) != 3) {
-        send_http_response(client_socket, 400, "text/plain", "Bad Request");
-        return;
-    }
-    
-    printf("📥 %s %s\n", method, path);
-    
-    if (strncmp(path, "/api/", 5) == 0) {
-        handle_api_request(client_socket, method, path, body);
-    } else {
-        send_http_response(client_socket, 404, "text/html", 
-            "<h1>404 - Page Not Found</h1><p>LUMS HTTP Server - API only</p>");
-    }
-}
+// === HANDLER CLIENT ===
 
-// Thread pour gérer un client
-void* handle_client(void* arg) {
-    client_data_t* client_data = (client_data_t*)arg;
-    int client_socket = client_data->socket;
+void* client_handler(void* arg) {
+    ClientConnection* client = (ClientConnection*)arg;
     char buffer[BUFFER_SIZE];
+    int bytes_received;
     
-    // Réception de la requête
-    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    printf("🔗 Client connecté: %d\n", client->socket_fd);
+    
+    // Timeout socket
+    struct timeval timeout;
+    timeout.tv_sec = 30;
+    timeout.tv_usec = 0;
+    setsockopt(client->socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    
+    bytes_received = recv(client->socket_fd, buffer, BUFFER_SIZE - 1, 0);
+    
     if (bytes_received > 0) {
         buffer[bytes_received] = '\0';
-        process_http_request(client_socket, buffer);
+        
+        // Parse HTTP request
+        char method[16], path[256], version[16];
+        if (sscanf(buffer, "%15s %255s %15s", method, path, version) == 3) {
+            
+            // Chercher body (après double CRLF)
+            char* body_start = strstr(buffer, "\r\n\r\n");
+            char* body = body_start ? body_start + 4 : "";
+            
+            total_requests++;
+            route_request(client->socket_fd, method, path, body, client->request_id);
+        } else {
+            send_http_response(client->socket_fd, 400, "text/plain", "Bad Request");
+        }
     }
     
-    // Fermeture de la connexion client
-    close(client_socket);
+    close(client->socket_fd);
     
-    // Décrémentation du compteur de clients actifs
+    // Retirer client de la liste
     pthread_mutex_lock(&clients_mutex);
-    active_clients--;
+    for (int i = 0; i < client_count; i++) {
+        if (active_clients[i].socket_fd == client->socket_fd) {
+            // Décaler les éléments
+            for (int j = i; j < client_count - 1; j++) {
+                active_clients[j] = active_clients[j + 1];
+            }
+            client_count--;
+            break;
+        }
+    }
     pthread_mutex_unlock(&clients_mutex);
     
-    free(client_data);
-    return NULL;
+    printf("🔌 Client déconnecté: %d\n", client->socket_fd);
+    free(client);
+    pthread_exit(NULL);
 }
 
-// Point d'entrée principal du serveur
-int main(void) {
-    printf("╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║                  SERVEUR HTTP LUMS/VORAX                    ║\n");
-    printf("║                    BACKEND COMPLET                          ║\n");
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
+// === FONCTION PRINCIPALE ===
 
-    // Installation gestionnaires signaux
+int main() {
+    printf("🚀 Démarrage serveur HTTP LUMS/VORAX v2.1\n");
+    
+    // Configuration signaux
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
+    signal(SIGPIPE, SIG_IGN);
     
     // Initialisation backend LUMS
     if (lums_backend_init() != 0) {
-        printf("✗ Échec initialisation backend LUMS\n");
+        fprintf(stderr, "❌ Erreur initialisation backend LUMS\n");
         return 1;
     }
     
-    // Test complet avant démarrage serveur
-    printf("\n🔧 Tests backend...\n");
+    // Test backend
+    printf("🧪 Exécution tests backend...\n");
     if (lums_backend_comprehensive_test() != 0) {
-        printf("✗ Tests backend échoués\n");
+        fprintf(stderr, "❌ Tests backend échoués\n");
         return 1;
     }
     
     // Création socket serveur
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket == -1) {
-        perror("Échec création socket");
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd == -1) {
+        perror("❌ Erreur création socket");
         return 1;
     }
     
     // Configuration socket
     int opt = 1;
-    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        perror("Échec configuration socket");
-        close(server_socket);
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("❌ Erreur setsockopt");
+        close(server_fd);
         return 1;
     }
     
-    // Configuration adresse serveur
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(PORT);
+    // Configuration adresse
+    struct sockaddr_in address;
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
     
-    // Bind du socket
-    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Échec bind socket");
-        close(server_socket);
+    // Bind
+    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        perror("❌ Erreur bind");
+        close(server_fd);
         return 1;
     }
     
-    // Écoute des connexions
-    if (listen(server_socket, MAX_CLIENTS) < 0) {
-        perror("Échec listen socket");
-        close(server_socket);
+    // Listen
+    if (listen(server_fd, MAX_CLIENTS) < 0) {
+        perror("❌ Erreur listen");
+        close(server_fd);
         return 1;
     }
     
-    printf("\n🚀 Serveur HTTP LUMS démarré sur port %d\n", PORT);
-    printf("📡 API endpoints disponibles:\n");
-    printf("   GET  http://0.0.0.0:%d/api/status\n", PORT);
-    printf("   POST http://0.0.0.0:%d/api/fusion\n", PORT);
-    printf("   POST http://0.0.0.0:%d/api/sqrt\n", PORT);
-    printf("   POST http://0.0.0.0:%d/api/prime\n", PORT);
-    printf("\n⏳ En attente de connexions...\n\n");
+    printf("✅ Serveur HTTP démarré sur 0.0.0.0:%d\n", PORT);
+    printf("📚 API disponible:\n");
+    printf("   GET  /api/status  - État du système\n");
+    printf("   POST /api/fusion  - Fusion de LUMs\n");
+    printf("   POST /api/sqrt    - Calcul racine carrée\n");
+    printf("   POST /api/prime   - Test de primalité\n");
+    printf("🔬 Logs scientifiques: logs/scientific_traces/\n");
+    printf("\n💡 Appuyez sur Ctrl+C pour arrêter\n\n");
     
-    // Boucle principale du serveur
+    server_running = 1;
+    uint64_t request_counter = 1;
+    
+    // Boucle principale
     while (server_running) {
-        struct sockaddr_in client_addr;
-        socklen_t client_len = sizeof(client_addr);
+        struct sockaddr_in client_address;
+        socklen_t client_len = sizeof(client_address);
         
-        int client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
-        if (client_socket < 0) {
-            if (server_running && errno != EINTR) {
-                perror("Échec accept");
+        int client_fd = accept(server_fd, (struct sockaddr*)&client_address, &client_len);
+        
+        if (client_fd < 0) {
+            if (server_running) {
+                perror("❌ Erreur accept");
             }
             continue;
         }
         
-        // Vérification limite clients
+        // Vérifier limite clients
         pthread_mutex_lock(&clients_mutex);
-        if (active_clients >= MAX_CLIENTS) {
+        if (client_count >= MAX_CLIENTS) {
             pthread_mutex_unlock(&clients_mutex);
-            send_http_response(client_socket, 503, "text/plain", "Server busy");
-            close(client_socket);
+            send_http_response(client_fd, 503, "text/plain", "Server overloaded");
+            close(client_fd);
             continue;
         }
-        active_clients++;
+        
+        // Créer structure client
+        ClientConnection* client = malloc(sizeof(ClientConnection));
+        if (!client) {
+            pthread_mutex_unlock(&clients_mutex);
+            close(client_fd);
+            continue;
+        }
+        
+        client->socket_fd = client_fd;
+        client->address = client_address;
+        client->connection_time = time(NULL);
+        client->request_id = request_counter++;
+        
+        // Ajouter à la liste
+        active_clients[client_count] = *client;
+        client_count++;
+        
         pthread_mutex_unlock(&clients_mutex);
         
-        // Création thread pour traiter le client
-        client_data_t* client_data = malloc(sizeof(client_data_t));
-        if (client_data) {
-            client_data->socket = client_socket;
-            client_data->address = client_addr;
-            client_data->thread_id = active_clients;
+        // Créer thread client
+        if (pthread_create(&client->thread_id, NULL, client_handler, client) != 0) {
+            perror("❌ Erreur création thread");
             
-            pthread_t thread;
-            if (pthread_create(&thread, NULL, handle_client, client_data) != 0) {
-                perror("Échec création thread");
-                close(client_socket);
-                free(client_data);
-                pthread_mutex_lock(&clients_mutex);
-                active_clients--;
-                pthread_mutex_unlock(&clients_mutex);
-            } else {
-                pthread_detach(thread);
-            }
-        } else {
-            close(client_socket);
             pthread_mutex_lock(&clients_mutex);
-            active_clients--;
+            client_count--;
             pthread_mutex_unlock(&clients_mutex);
+            
+            close(client_fd);
+            free(client);
+        } else {
+            pthread_detach(client->thread_id);
         }
     }
     
-    // Nettoyage final
-    printf("\n🧹 Nettoyage et arrêt...\n");
+    close(server_fd);
     lums_backend_cleanup();
-    close(server_socket);
-    printf("✓ Serveur arrêté proprement\n");
     
+    printf("🛑 Serveur arrêté proprement\n");
     return 0;
 }
