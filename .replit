@@ -79,3 +79,40 @@ args = "echo \"         show 2\""
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "./build/electromechanical_console"
+
+[[workflows.workflow]]
+name = "Build & Run Electromechanical"
+author = 47121647
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make clean"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make all"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"=== SYSTÈME ÉLECTROMÉCANIQUE LUMS/VORAX ===\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"Tapez 'help' pour voir les commandes disponibles\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"Exemple: load 0 11010\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"         fuse 0 1 2\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"         show 2\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "./build/electromechanical_console"
