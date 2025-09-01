@@ -52,6 +52,10 @@ typedef struct {
     char error_message[256];
 } ElectromechanicalEngine;
 
+// Variables globales
+extern ElectromechanicalEngine g_engine;
+extern uint8_t g_initialized;
+
 // Fonctions principales
 int init_electromechanical_system(ElectromechanicalEngine *engine);
 void set_relay_state(uint8_t bank, uint8_t position, RelayState state);

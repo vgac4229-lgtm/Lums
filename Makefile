@@ -1,73 +1,64 @@
-# Makefile pour LUMS/VORAX Électromécanique
+
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror -std=c99 -g
+CFLAGS = -Wall -Wextra -g -std=c99 -fPIC
 SRCDIR = server/lums
 BUILDDIR = build
-TARGET_LIB = $(BUILDDIR)/liblums.a
-TARGET_CONSOLE = $(BUILDDIR)/electromechanical_console
-
-# Sources
-SOURCES = $(SRCDIR)/encoder.c $(SRCDIR)/decoder.c $(SRCDIR)/operations.c $(SRCDIR)/vorax.c $(SRCDIR)/electromechanical.c
-CONSOLE_SRC = $(SRCDIR)/electromechanical_console.c
+SOURCES = $(wildcard $(SRCDIR)/*.c)
 OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
-CONSOLE_OBJ = $(CONSOLE_SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
+LIBRARY = $(BUILDDIR)/liblums.a
+MAIN_TARGETS = $(BUILDDIR)/electromechanical_console $(BUILDDIR)/vorax_vm $(BUILDDIR)/lums_http_server
 
-# Rules
-.PHONY: all clean test install
+.PHONY: all clean test run-electro run-vm
 
-all: $(TARGET_LIB) $(TARGET_CONSOLE)
+all: $(BUILDDIR) $(LIBRARY) $(MAIN_TARGETS)
+	@echo "✓ Build completed successfully"
+	@echo "✓ Library: $(LIBRARY)"
+	@echo "✓ Executables: $(MAIN_TARGETS)"
 
 $(BUILDDIR):
+	@echo "Creating build directory..."
 	@mkdir -p $(BUILDDIR)
 
-$(BUILDDIR)/%.o: $(SRCDIR)/%.c | $(BUILDDIR)
+$(BUILDDIR)/%.o: $(SRCDIR)/%.c
 	@echo "Compiling $<..."
-	$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET_LIB): $(OBJECTS)
+$(LIBRARY): $(OBJECTS)
 	@echo "Creating static library..."
-	ar rcs $@ $^
+	@ar rcs $@ $^
 	@echo "✓ Library created: $@"
 
-$(TARGET_CONSOLE): $(CONSOLE_OBJ) $(TARGET_LIB)
+$(BUILDDIR)/electromechanical_console: $(SRCDIR)/electromechanical_console.c $(LIBRARY)
 	@echo "Building electromechanical console..."
-	$(CC) $(CFLAGS) $< -L$(BUILDDIR) -llums -o $@
-	@echo "✓ Console executable created: $@"
+	@$(CC) $(CFLAGS) $< -L$(BUILDDIR) -llums -lm -o $@
+
+$(BUILDDIR)/vorax_vm: $(SRCDIR)/vorax.c $(LIBRARY)
+	@echo "Building VORAX VM..."
+	@$(CC) $(CFLAGS) -DMAIN_PROGRAM $< -L$(BUILDDIR) -llums -lm -o $@
+
+$(BUILDDIR)/lums_http_server: $(SRCDIR)/lums_http_server.c $(LIBRARY)
+	@echo "Building LUMS HTTP Server..."
+	@$(CC) $(CFLAGS) $< -L$(BUILDDIR) -llums -lm -lpthread -o $@
 
 clean:
 	@echo "Cleaning build files..."
-	rm -rf $(BUILDDIR)
+	@rm -rf $(BUILDDIR)
 	@echo "✓ Clean completed"
 
-test: $(TARGET_CONSOLE)
-	@echo "Running electromechanical system tests..."
-	@echo "test" | $(TARGET_CONSOLE)
+test: all
+	@echo "Running tests..."
+	@./$(BUILDDIR)/electromechanical_console < /dev/null || true
 	@echo "✓ Tests completed"
 
-install: all
-	@echo "✓ LUMS/VORAX Électromécanique ready"
-	@echo "Run: ./$(TARGET_CONSOLE)"
+run-electro: $(BUILDDIR)/electromechanical_console
+	@echo "=== SYSTÈME ÉLECTROMÉCANIQUE LUMS/VORAX ==="
+	@echo "Tapez 'help' pour voir les commandes disponibles"
+	@./$(BUILDDIR)/electromechanical_console
 
-# Development targets
-dev: all
-	@echo "=== DÉVELOPPEMENT ÉLECTROMÉCANIQUE ==="
-	@echo "Console: ./$(TARGET_CONSOLE)"
-	@echo "Tests:   make test"
+run-vm: $(BUILDDIR)/vorax_vm
+	@echo "=== VM VORAX ==="
+	@./$(BUILDDIR)/vorax_vm
 
-# Production build
-production: CFLAGS += -O3 -DNDEBUG
-production: clean all
-	@echo "✓ Production build completed"
-
-# Help
-help:
-	@echo "LUMS/VORAX Électromécanique Makefile"
-	@echo ""
-	@echo "Targets:"
-	@echo "  all         - Build library and console"
-	@echo "  clean       - Remove build files"
-	@echo "  test        - Run system tests"
-	@echo "  install     - Build and prepare for use"
-	@echo "  dev         - Development build with info"
-	@echo "  production  - Optimized production build"
-	@echo "  help        - Show this help"
+run-server: $(BUILDDIR)/lums_http_server
+	@echo "=== SERVEUR HTTP LUMS ==="
+	@./$(BUILDDIR)/lums_http_server

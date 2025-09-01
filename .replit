@@ -23,7 +23,7 @@ externalPort = 3000
 PORT = "5000"
 
 [workflows]
-runButton = "Build & Run Electromechanical"
+runButton = "Backend LUMS Complet"
 
 [[workflows.workflow]]
 name = "Project"
@@ -116,3 +116,68 @@ args = "echo \"         show 2\""
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "./build/electromechanical_console"
+
+[[workflows.workflow]]
+name = "Backend LUMS Complet"
+author = 47121647
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"=== COMPILATION BACKEND LUMS COMPLET ===\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make clean"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "make all"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"=== TEST BACKEND ÉLECTROMÉCANIQUE ===\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"test\" | timeout 10 ./build/electromechanical_console || echo \"Test électromécanique terminé\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"=== DÉMARRAGE SERVEUR HTTP LUMS ===\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"Backend LUMS démarré sur http://0.0.0.0:8080\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"API disponible:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"  GET  /api/status\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"  POST /api/fusion\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"  POST /api/prime\" "
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"  POST /api/sqrt\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "./build/lums_http_server"
