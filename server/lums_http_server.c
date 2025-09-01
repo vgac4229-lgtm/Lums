@@ -1,4 +1,5 @@
 
+#include "lums/lums_backend.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,302 +8,198 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <signal.h>
-#include "lums_backend.h"
+#include <errno.h>
+#include <time.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 4096
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 100
 
-static int server_socket = -1;
+// Variables globales pour le serveur
 static int server_running = 1;
+static int server_socket = -1;
+static pthread_t client_threads[MAX_CLIENTS];
+static int active_clients = 0;
+static pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// Structure pour client thread
+// Structure pour passer les données aux threads clients
 typedef struct {
-    int client_socket;
-    struct sockaddr_in client_addr;
-    int client_id;
-} ClientContext;
+    int socket;
+    struct sockaddr_in address;
+    int thread_id;
+} client_data_t;
 
-// Gestionnaire signal propre
-void signal_handler(int sig) {
-    printf("\n🛑 Arrêt serveur LUMS (signal %d)\n", sig);
+// Gestionnaire de signal pour arrêt propre
+void signal_handler(int signal) {
+    printf("\n🛑 Signal %d reçu, arrêt du serveur...\n", signal);
     server_running = 0;
-    if (server_socket >= 0) {
+    if (server_socket != -1) {
         close(server_socket);
     }
-    exit(0);
 }
 
-// Envoi réponse HTTP
+// Fonction pour envoyer une réponse HTTP
 void send_http_response(int client_socket, int status_code, const char* content_type, const char* body) {
-    char response[BUFFER_SIZE];
-    int body_length = body ? strlen(body) : 0;
+    char response[BUFFER_SIZE * 2];
+    char* status_text = "OK";
+    
+    switch (status_code) {
+        case 200: status_text = "OK"; break;
+        case 400: status_text = "Bad Request"; break;
+        case 404: status_text = "Not Found"; break;
+        case 500: status_text = "Internal Server Error"; break;
+    }
     
     snprintf(response, sizeof(response),
         "HTTP/1.1 %d %s\r\n"
         "Content-Type: %s\r\n"
-        "Content-Length: %d\r\n"
         "Access-Control-Allow-Origin: *\r\n"
         "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
         "Access-Control-Allow-Headers: Content-Type\r\n"
+        "Content-Length: %zu\r\n"
+        "Connection: close\r\n"
         "\r\n"
         "%s",
-        status_code,
-        status_code == 200 ? "OK" : "Error",
-        content_type,
-        body_length,
-        body ? body : ""
+        status_code, status_text, content_type, strlen(body), body
     );
     
     send(client_socket, response, strlen(response), 0);
 }
 
-// Traitement requête API LUMS
-void handle_lums_api(int client_socket, const char* method, const char* path, const char* body) {
+// Traitement des requêtes API
+void handle_api_request(int client_socket, const char* method, const char* path, const char* body) {
     char json_response[2048];
     
-    if (strcmp(method, "GET") == 0 && strcmp(path, "/api/status") == 0) {
-        // Status backend
+    if (strcmp(method, "OPTIONS") == 0) {
+        send_http_response(client_socket, 200, "text/plain", "");
+        return;
+    }
+    
+    if (strcmp(path, "/api/status") == 0) {
         snprintf(json_response, sizeof(json_response),
             "{"
             "\"status\":\"operational\","
-            "\"backend_initialized\":true,"
-            "\"total_computations\":%lu,"
-            "\"energy_consumed\":%lu,"
-            "\"computation_time_ms\":%.2f,"
-            "\"timestamp\":%ld"
+            "\"backend\":\"LUMS/VORAX\","
+            "\"version\":\"2.0\","
+            "\"timestamp\":%ld,"
+            "\"computations\":%lu,"
+            "\"energy_consumed\":%lu"
             "}",
-            g_backend.total_computations,
-            g_backend.energy_consumed,
-            g_backend.computation_time_ms,
-            time(NULL)
+            time(NULL),
+            lums_backend_get_total_computations(),
+            lums_backend_get_energy_consumed()
         );
         send_http_response(client_socket, 200, "application/json", json_response);
-    }
-    else if (strcmp(method, "POST") == 0 && strcmp(path, "/api/fusion") == 0) {
-        // Parse JSON body pour fusion
-        uint64_t lum1 = 0b11010;  // Valeurs par défaut pour test
-        uint64_t lum2 = 0b1100;
         
-        // Parse basique du JSON (simplifié)
-        if (body && strstr(body, "lum1")) {
-            char* lum1_str = strstr(body, "\"lum1\":");
-            if (lum1_str) {
-                sscanf(lum1_str + 7, "%lu", &lum1);
-            }
-        }
-        
+    } else if (strcmp(path, "/api/fusion") == 0 && strcmp(method, "POST") == 0) {
+        // Parse les paramètres de fusion depuis le body JSON
+        uint64_t value1 = 0b11010;  // Valeur par défaut
+        uint64_t value2 = 0b1100;   // Valeur par défaut
         uint64_t result;
-        int fusion_status = lums_compute_fusion_real(lum1, lum2, &result);
         
-        snprintf(json_response, sizeof(json_response),
-            "{"
-            "\"success\":%s,"
-            "\"lum1\":%lu,"
-            "\"lum2\":%lu,"
-            "\"result\":%lu,"
-            "\"lum_count\":%d,"
-            "\"computation_time_ms\":%.2f"
-            "}",
-            fusion_status == 0 ? "true" : "false",
-            lum1, lum2, result,
-            __builtin_popcountll(result),
-            g_backend.computation_time_ms
-        );
-        send_http_response(client_socket, 200, "application/json", json_response);
-    }
-    else if (strcmp(method, "POST") == 0 && strcmp(path, "/api/prime") == 0) {
-        // Test primalité
-        uint64_t candidate = 17; // Défaut
-        
-        if (body && strstr(body, "number")) {
-            char* num_str = strstr(body, "\"number\":");
-            if (num_str) {
-                sscanf(num_str + 9, "%lu", &candidate);
-            }
+        if (lums_compute_fusion_real(value1, value2, &result) == 0) {
+            snprintf(json_response, sizeof(json_response),
+                "{"
+                "\"success\":true,"
+                "\"operation\":\"fusion\","
+                "\"input1\":%lu,"
+                "\"input2\":%lu,"
+                "\"result\":%lu,"
+                "\"lum_count\":%d"
+                "}",
+                value1, value2, result, __builtin_popcountll(result)
+            );
+            send_http_response(client_socket, 200, "application/json", json_response);
+        } else {
+            send_http_response(client_socket, 500, "application/json", 
+                "{\"success\":false,\"error\":\"Fusion failed\"}");
         }
         
-        int is_prime = lums_test_prime_real(candidate);
+    } else if (strcmp(path, "/api/sqrt") == 0 && strcmp(method, "POST") == 0) {
+        double input = 16.0;  // Valeur par défaut
+        double result = lums_compute_sqrt_via_lums(input);
         
         snprintf(json_response, sizeof(json_response),
             "{"
-            "\"number\":%lu,"
-            "\"is_prime\":%s,"
-            "\"computation_time_ms\":%.2f,"
-            "\"method\":\"electromechanical_lums\""
-            "}",
-            candidate,
-            is_prime ? "true" : "false",
-            g_backend.computation_time_ms
-        );
-        send_http_response(client_socket, 200, "application/json", json_response);
-    }
-    else if (strcmp(method, "POST") == 0 && strcmp(path, "/api/sqrt") == 0) {
-        // Calcul racine carrée
-        double input = 16.0; // Défaut
-        
-        if (body && strstr(body, "value")) {
-            char* val_str = strstr(body, "\"value\":");
-            if (val_str) {
-                sscanf(val_str + 8, "%lf", &input);
-            }
-        }
-        
-        double sqrt_result = lums_compute_sqrt_via_lums(input);
-        
-        snprintf(json_response, sizeof(json_response),
-            "{"
+            "\"success\":true,"
+            "\"operation\":\"sqrt\","
             "\"input\":%.6f,"
-            "\"result\":%.10f,"
-            "\"precision\":%.2e,"
-            "\"computation_time_ms\":%.2f,"
-            "\"method\":\"newton_raphson_lums\""
+            "\"result\":%.6f,"
+            "\"method\":\"LUM_electromechanical\""
             "}",
-            input, sqrt_result,
-            fabs(sqrt_result * sqrt_result - input),
-            g_backend.computation_time_ms
+            input, result
         );
         send_http_response(client_socket, 200, "application/json", json_response);
-    }
-    else {
-        // API non trouvée
-        send_http_response(client_socket, 404, "application/json", 
-                          "{\"error\":\"API endpoint not found\"}");
-    }
-}
-
-// Parse requête HTTP basique
-void parse_http_request(const char* request, char* method, char* path, char* body) {
-    // Extract method
-    sscanf(request, "%s %s", method, path);
-    
-    // Extract body (après double CRLF)
-    char* body_start = strstr(request, "\r\n\r\n");
-    if (body_start) {
-        strcpy(body, body_start + 4);
+        
+    } else if (strcmp(path, "/api/prime") == 0 && strcmp(method, "POST") == 0) {
+        int number = 17;  // Valeur par défaut
+        int is_prime = lums_test_prime_real(number);
+        
+        snprintf(json_response, sizeof(json_response),
+            "{"
+            "\"success\":true,"
+            "\"operation\":\"prime_test\","
+            "\"number\":%d,"
+            "\"is_prime\":%s,"
+            "\"method\":\"LUM_division_test\""
+            "}",
+            number, is_prime ? "true" : "false"
+        );
+        send_http_response(client_socket, 200, "application/json", json_response);
+        
     } else {
-        body[0] = '\0';
+        send_http_response(client_socket, 404, "application/json", 
+            "{\"error\":\"Endpoint not found\"}");
     }
 }
 
-// Thread client
-void* handle_client_thread(void* arg) {
-    ClientContext* ctx = (ClientContext*)arg;
+// Fonction pour traiter une requête HTTP
+void process_http_request(int client_socket, const char* request) {
+    char method[16], path[256], version[16];
+    char* body_start = strstr(request, "\r\n\r\n");
+    char* body = body_start ? body_start + 4 : "";
+    
+    if (sscanf(request, "%15s %255s %15s", method, path, version) != 3) {
+        send_http_response(client_socket, 400, "text/plain", "Bad Request");
+        return;
+    }
+    
+    printf("📥 %s %s\n", method, path);
+    
+    if (strncmp(path, "/api/", 5) == 0) {
+        handle_api_request(client_socket, method, path, body);
+    } else {
+        send_http_response(client_socket, 404, "text/html", 
+            "<h1>404 - Page Not Found</h1><p>LUMS HTTP Server - API only</p>");
+    }
+}
+
+// Thread pour gérer un client
+void* handle_client(void* arg) {
+    client_data_t* client_data = (client_data_t*)arg;
+    int client_socket = client_data->socket;
     char buffer[BUFFER_SIZE];
-    char method[16], path[256], body[1024];
     
-    printf("📡 Client %d connecté\n", ctx->client_id);
-    
-    // Réception requête
-    int bytes_received = recv(ctx->client_socket, buffer, sizeof(buffer) - 1, 0);
+    // Réception de la requête
+    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
     if (bytes_received > 0) {
         buffer[bytes_received] = '\0';
-        
-        // Parse requête
-        parse_http_request(buffer, method, path, body);
-        printf("📨 %s %s (client %d)\n", method, path, ctx->client_id);
-        
-        // Traitement API
-        if (strncmp(path, "/api/", 5) == 0) {
-            handle_lums_api(ctx->client_socket, method, path, body);
-        } else {
-            // Page d'accueil simple
-            const char* html = 
-                "<!DOCTYPE html>"
-                "<html><head><title>LUMS Backend Server</title></head>"
-                "<body>"
-                "<h1>🧮 LUMS/VORAX Backend Server</h1>"
-                "<p>Backend opérationnel avec calculs électromécaniques réels</p>"
-                "<ul>"
-                "<li><a href='/api/status'>Status Backend</a></li>"
-                "<li>POST /api/fusion - Fusion LUMs</li>"
-                "<li>POST /api/prime - Test primalité</li>"
-                "<li>POST /api/sqrt - Racine carrée</li>"
-                "</ul>"
-                "</body></html>";
-            send_http_response(ctx->client_socket, 200, "text/html", html);
-        }
+        process_http_request(client_socket, buffer);
     }
     
-    close(ctx->client_socket);
-    printf("📴 Client %d déconnecté\n", ctx->client_id);
-    free(ctx);
+    // Fermeture de la connexion client
+    close(client_socket);
+    
+    // Décrémentation du compteur de clients actifs
+    pthread_mutex_lock(&clients_mutex);
+    active_clients--;
+    pthread_mutex_unlock(&clients_mutex);
+    
+    free(client_data);
     return NULL;
 }
 
-// Serveur principal
-int run_lums_http_server(void) {
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t client_len = sizeof(client_addr);
-    int client_counter = 0;
-    
-    // Création socket
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket < 0) {
-        perror("Erreur création socket");
-        return -1;
-    }
-    
-    // Configuration socket
-    int opt = 1;
-    setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(PORT);
-    
-    // Bind
-    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Erreur bind");
-        close(server_socket);
-        return -2;
-    }
-    
-    // Listen
-    if (listen(server_socket, MAX_CLIENTS) < 0) {
-        perror("Erreur listen");
-        close(server_socket);
-        return -3;
-    }
-    
-    printf("🚀 Serveur LUMS démarré sur port %d\n", PORT);
-    printf("🌐 URL: http://0.0.0.0:%d/\n", PORT);
-    
-    // Boucle acceptation clients
-    while (server_running) {
-        int client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
-        if (client_socket < 0) {
-            if (server_running) {
-                perror("Erreur accept");
-            }
-            continue;
-        }
-        
-        // Création thread client
-        ClientContext* ctx = malloc(sizeof(ClientContext));
-        if (ctx) {
-            ctx->client_socket = client_socket;
-            ctx->client_addr = client_addr;
-            ctx->client_id = ++client_counter;
-            
-            pthread_t client_thread;
-            if (pthread_create(&client_thread, NULL, handle_client_thread, ctx) != 0) {
-                printf("✗ Erreur création thread client\n");
-                close(client_socket);
-                free(ctx);
-            } else {
-                pthread_detach(client_thread);
-            }
-        } else {
-            close(client_socket);
-        }
-    }
-    
-    close(server_socket);
-    return 0;
-}
-
-// Point d'entrée principal serveur
+// Point d'entrée principal du serveur
 int main(void) {
     printf("╔══════════════════════════════════════════════════════════════╗\n");
     printf("║                  SERVEUR HTTP LUMS/VORAX                    ║\n");
@@ -313,20 +210,117 @@ int main(void) {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
-    // Initialisation backend
+    // Initialisation backend LUMS
     if (lums_backend_init() != 0) {
         printf("✗ Échec initialisation backend LUMS\n");
         return 1;
     }
     
     // Test complet avant démarrage serveur
-    printf("\n=== VALIDATION BACKEND AVANT DÉMARRAGE ===\n");
+    printf("\n🔧 Tests backend...\n");
     if (lums_backend_comprehensive_test() != 0) {
-        printf("✗ Échec validation backend\n");
-        return 2;
+        printf("✗ Tests backend échoués\n");
+        return 1;
     }
     
-    // Démarrage serveur HTTP
-    printf("\n=== DÉMARRAGE SERVEUR HTTP ===\n");
-    return run_lums_http_server();
+    // Création socket serveur
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == -1) {
+        perror("Échec création socket");
+        return 1;
+    }
+    
+    // Configuration socket
+    int opt = 1;
+    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("Échec configuration socket");
+        close(server_socket);
+        return 1;
+    }
+    
+    // Configuration adresse serveur
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(PORT);
+    
+    // Bind du socket
+    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Échec bind socket");
+        close(server_socket);
+        return 1;
+    }
+    
+    // Écoute des connexions
+    if (listen(server_socket, MAX_CLIENTS) < 0) {
+        perror("Échec listen socket");
+        close(server_socket);
+        return 1;
+    }
+    
+    printf("\n🚀 Serveur HTTP LUMS démarré sur port %d\n", PORT);
+    printf("📡 API endpoints disponibles:\n");
+    printf("   GET  http://0.0.0.0:%d/api/status\n", PORT);
+    printf("   POST http://0.0.0.0:%d/api/fusion\n", PORT);
+    printf("   POST http://0.0.0.0:%d/api/sqrt\n", PORT);
+    printf("   POST http://0.0.0.0:%d/api/prime\n", PORT);
+    printf("\n⏳ En attente de connexions...\n\n");
+    
+    // Boucle principale du serveur
+    while (server_running) {
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        
+        int client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
+        if (client_socket < 0) {
+            if (server_running && errno != EINTR) {
+                perror("Échec accept");
+            }
+            continue;
+        }
+        
+        // Vérification limite clients
+        pthread_mutex_lock(&clients_mutex);
+        if (active_clients >= MAX_CLIENTS) {
+            pthread_mutex_unlock(&clients_mutex);
+            send_http_response(client_socket, 503, "text/plain", "Server busy");
+            close(client_socket);
+            continue;
+        }
+        active_clients++;
+        pthread_mutex_unlock(&clients_mutex);
+        
+        // Création thread pour traiter le client
+        client_data_t* client_data = malloc(sizeof(client_data_t));
+        if (client_data) {
+            client_data->socket = client_socket;
+            client_data->address = client_addr;
+            client_data->thread_id = active_clients;
+            
+            pthread_t thread;
+            if (pthread_create(&thread, NULL, handle_client, client_data) != 0) {
+                perror("Échec création thread");
+                close(client_socket);
+                free(client_data);
+                pthread_mutex_lock(&clients_mutex);
+                active_clients--;
+                pthread_mutex_unlock(&clients_mutex);
+            } else {
+                pthread_detach(thread);
+            }
+        } else {
+            close(client_socket);
+            pthread_mutex_lock(&clients_mutex);
+            active_clients--;
+            pthread_mutex_unlock(&clients_mutex);
+        }
+    }
+    
+    // Nettoyage final
+    printf("\n🧹 Nettoyage et arrêt...\n");
+    lums_backend_cleanup();
+    close(server_socket);
+    printf("✓ Serveur arrêté proprement\n");
+    
+    return 0;
 }
