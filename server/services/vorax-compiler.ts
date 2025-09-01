@@ -110,15 +110,6 @@ export class VoraxCompiler {
     throw new Error(`Cannot parse expression: ${expr}`);
   }
 
-    CYCLE: 0x13,
-    STORE: 0x14,
-    RETRIEVE: 0x15,
-    COMPRESS: 0x16,
-    EXPAND: 0x17,
-    NOP: 0x00,
-    HALT: 0xFF
-  };
-
   parseVoraxCode(code: string): VIRInstruction[] {
     const lines = code.split('\n').filter(line => line.trim() && !line.startsWith('#'));
     this.instructions = [];

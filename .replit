@@ -9,8 +9,8 @@ packages = ["unzip"]
 
 [deployment]
 deploymentTarget = "autoscale"
-build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+build = ["sh", "-c", "make"]
+run = ["sh", "-c", "npm run dev"]
 
 [[ports]]
 localPort = 5000
