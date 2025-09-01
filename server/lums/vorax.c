@@ -3,7 +3,8 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-#include <stdlib.h> // For rand()
+#include <stdlib.h>
+#include <unistd.h> // For getpid
 
 /**
  * Create a new VORAX engine

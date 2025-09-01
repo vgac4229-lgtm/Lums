@@ -12,7 +12,8 @@ typedef enum {
     LUM_LINEAR = 0,
     LUM_GROUP = 1,
     LUM_NODE = 2,
-    LUM_CYCLE = 3
+    LUM_CYCLE = 3,
+    LUM_CLUSTER = 4
 } LumStructureType;
 
 // Group Types
@@ -20,7 +21,11 @@ typedef enum {
     GROUP_LINEAR = 0,
     GROUP_CLUSTER = 1,
     GROUP_NODE = 2,
-    GROUP_MEMORY = 3
+    GROUP_MEMORY = 3,
+    GROUP_FRACTAL = 4,
+    GROUP_INVERTED = 5,
+    GROUP_INFINITE = 6,
+    GROUP_HARMONIC = 7
 } GroupType;
 
 // Core LUM structure
@@ -60,6 +65,9 @@ typedef struct {
     time_t timestamp;
 } VoraxMemory;
 
+#define MAX_ZONES 16
+#define MAX_MEMORY_SLOTS 32
+
 // VORAX Engine state
 typedef struct {
     VoraxZone* zones;
@@ -68,6 +76,9 @@ typedef struct {
     size_t memory_count;
     char* last_error;
     char error_message[256];
+    char* zone_names[MAX_ZONES];
+    uint64_t current_tick;
+    double energy_budget;
 } VoraxEngine;
 
 // Core encoding/decoding functions
@@ -113,15 +124,15 @@ const char* vorax_get_last_error(VoraxEngine* engine);
 void vorax_clear_error(VoraxEngine* engine);
 void vorax_set_error(VoraxEngine* engine, const char* error_msg);
 
-// VM VORAX functions
+// VM VORAX functions  
 VoraxEngine* vorax_create_engine(void);
 void vorax_destroy_engine(VoraxEngine* engine);
 int vorax_fuse_zones(VoraxEngine* engine, int zone1, int zone2);
 int vorax_split_zone(VoraxEngine* engine, int zone, int parts);
 int vorax_move_lums(VoraxEngine* engine, int src_zone, int dst_zone, int amount);
 int vorax_cycle_zone(VoraxEngine* engine, int zone, int modulo);
-int vorax_store_memory(VoraxEngine* engine, int memory_slot, int zone, int amount);
-int vorax_retrieve_memory(VoraxEngine* engine, int memory_slot, int zone);
+int vorax_store_memory_by_slot(VoraxEngine* engine, int memory_slot, int zone, int amount);
+int vorax_retrieve_memory_by_slot(VoraxEngine* engine, int memory_slot, int zone);
 
 // Bootstrap sequence
 int vorax_bootstrap_phase1(void);  // Initialize core primitives

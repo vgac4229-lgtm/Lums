@@ -293,26 +293,7 @@ LUMGroup** lum_contextual_split(LUMGroup* source, size_t* result_count) {
     return result;
 }
 
-/**
- * Memory management helper
- */
-void free_lum_group(LUMGroup* group) {
-    if (group) {
-        if (group->lums) {
-            free(group->lums);
-        }
-        if (group->id) {
-            free(group->id);
-        }
-        if (group->connections) {
-            free(group->connections);
-        }
-        if (group->spatial_data) {
-            free(group->spatial_data);
-        }
-        free(group);
-    }
-}
+// free_lum_group function moved to lumgroup.c to avoid duplication
 
 /**
  * Free split result array

@@ -1,6 +1,12 @@
 
 #include "lums_backend.h"
+#include "lums.h"
 #include "electromechanical.h"
+
+// Forward declarations for missing functions
+int electromechanical_engine_init(ElectromechanicalEngine* engine);
+void electromechanical_engine_cleanup(ElectromechanicalEngine* engine);
+int electromechanical_operate_relay(ElectromechanicalEngine* engine, int relay_id, int state);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +19,7 @@
 // Structure backend LUMS complète (corrigée)
 typedef struct {
     ElectromechanicalEngine electro_engine;
-    VoraxEngine* vorax_engine;
+    void* vorax_engine;
     uint64_t total_computations;
     uint64_t energy_consumed;
     double computation_time_ms;

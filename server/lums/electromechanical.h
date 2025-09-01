@@ -52,9 +52,8 @@ typedef struct {
     char error_message[256];
 } ElectromechanicalEngine;
 
-// Variables globales
-extern ElectromechanicalEngine g_engine;
-extern uint8_t g_initialized;
+// Variables globales - déclarations
+// static variables defined in electromechanical.c
 
 // Fonctions principales
 int init_electromechanical_system(ElectromechanicalEngine *engine);
