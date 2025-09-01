@@ -5,6 +5,9 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+// Déclaration externe de la fonction vectorisée
+extern void lums_fusion_vectorized(double* a, double* b, double* result, size_t count);
+
 // Structure pour code JIT compilé
 typedef struct {
     void* code_buffer;

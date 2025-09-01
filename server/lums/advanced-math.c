@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <immintrin.h>  // AVX2/SIMD
+#include "lums_backend.h"
 
 // Détection runtime des capacités SIMD
 static bool simd_available = false;
@@ -148,6 +149,34 @@ bool lums_is_prime_miller_rabin(uint64_t n, int k) {
     long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
     log_scientific_operation("PRIME_TEST_PROBABLE", (double)n, 1.0, duration_ns);
     return true;
+}
+
+// Fonction manquante: validation de conservation
+bool validate_lum_conservation(size_t total_before, size_t total_after, const char* operation_name) {
+    if (total_before != total_after) {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        uint64_t timestamp_ns = (uint64_t)tv.tv_sec * 1000000000ULL + (uint64_t)tv.tv_usec * 1000ULL;
+        
+        FILE* violation_log = fopen("logs/scientific_traces/conservation_violations.jsonl", "a");
+        if (violation_log) {
+            fprintf(violation_log, 
+                    "{\"timestamp_ns\":%lu,\"violation_type\":\"CONSERVATION\","
+                    "\"before\":%zu,\"after\":%zu,\"diff\":%ld,\"operation\":\"%s\"}\n",
+                    timestamp_ns, total_before, total_after, 
+                    (long)(total_after - total_before), operation_name);
+            fclose(violation_log);
+        }
+        return false;
+    }
+    return true;
+}
+
+// Fonction manquante: get_nanosecond_timestamp
+uint64_t get_nanosecond_timestamp() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 
 // Fibonacci calculé RÉELLEMENT (pas de hardcoding)

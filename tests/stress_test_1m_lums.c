@@ -4,7 +4,24 @@
 #include <time.h>
 #include <assert.h>
 #include <string.h>
+#include <stdbool.h>
+#include <math.h>
 #include "../server/lums/lums.h"
+
+// Variables globales pour SIMD
+bool simd_available = false;
+
+// Fonction d'initialisation SIMD
+void init_simd_support() {
+    simd_available = false; // Désactivé pour compatibilité
+}
+
+// Implémentation fusion vectorisée simple
+void lums_fusion_vectorized(double* lums_a, double* lums_b, double* result, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        result[i] = lums_a[i] + lums_b[i];
+    }
+}
 
 #define MAX_LUMS 1000000
 #define STRESS_ITERATIONS 1000

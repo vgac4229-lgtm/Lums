@@ -52,3 +52,28 @@ void lums_backend_status_report(void);
 int lums_backend_comprehensive_test(void);
 
 #endif // LUMS_BACKEND_H
+#ifndef LUMS_BACKEND_H
+#define LUMS_BACKEND_H
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
+
+// Déclarations des fonctions mathématiques
+double lums_sqrt_newton_raphson(double x, double precision);
+bool lums_is_prime_miller_rabin(uint64_t n, int k);
+uint64_t lums_fibonacci_authentic(int n);
+
+// Déclarations des fonctions de logging
+void log_scientific_operation(const char* operation, double input, double result, long duration_ns);
+
+// Déclarations des fonctions de validation
+bool validate_lum_conservation(size_t total_before, size_t total_after, const char* operation_name);
+uint64_t get_nanosecond_timestamp(void);
+
+// Déclarations des fonctions SIMD
+extern bool simd_available;
+void init_simd_support(void);
+void lums_fusion_vectorized(double* lums_a, double* lums_b, double* result, size_t count);
+
+#endif // LUMS_BACKEND_H

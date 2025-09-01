@@ -4,8 +4,9 @@ CFLAGS_RELEASE = -Wall -Wextra -O3 -std=c99 -fPIC -DNDEBUG -pthread
 SRCDIR = server/lums
 BUILDDIR = build
 TESTDIR = tests
-SOURCES = $(wildcard $(SRCDIR)/*.c)
+SOURCES = $(wildcard $(SRCDIR)/*.c) $(wildcard $(TESTDIR)/*.c)
 OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
+OBJECTS := $(filter-out $(BUILDDIR)/electromechanical_console.o $(BUILDDIR)/lums_http_server.o, $(OBJECTS))
 LIBRARY = $(BUILDDIR)/liblums.a
 MAIN_TARGETS = $(BUILDDIR)/electromechanical_console $(BUILDDIR)/vorax_vm $(BUILDDIR)/lums_http_server
 TEST_TARGETS = $(BUILDDIR)/scientific_validation
