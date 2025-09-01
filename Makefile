@@ -10,7 +10,7 @@ LIBRARY = $(BUILDDIR)/liblums.a
 MAIN_TARGETS = $(BUILDDIR)/electromechanical_console $(BUILDDIR)/vorax_vm $(BUILDDIR)/lums_http_server
 TEST_TARGETS = $(BUILDDIR)/scientific_validation
 
-.PHONY: all clean test test-scientific run-electro run-vm run-server install-deps validation-complete
+.PHONY: all clean test test-scientific run-electro run-vm run-server install-deps validation-complete test-security test-performance test-valgrind test-stress test-forensic
 
 all: $(BUILDDIR) $(LIBRARY) $(MAIN_TARGETS) $(TEST_TARGETS)
 	@echo "✓ Build completed successfully"
@@ -62,12 +62,10 @@ install-deps:
 	@npm install --legacy-peer-deps
 	@echo "✓ Dependencies installed"
 
-test: all
+test: $(BUILDDIR)/scientific_validation
 	@echo "=== COMPILATION TESTS SCIENTIFIQUES ==="
-	$(CC) $(CFLAGS) -o build/scientific_tests tests/scientific_validation_complete.c $(OBJECTS) -L$(BUILDDIR) -llums -lm -lpthread
-	@echo ""
 	@echo "=== EXÉCUTION TESTS SCIENTIFIQUES ==="
-	./build/scientific_tests
+	./$(BUILDDIR)/scientific_validation
 	@echo ""
 	@echo "=== VÉRIFICATION LOGS SCIENTIFIQUES ==="
 	@ls -la logs/scientific_traces/
@@ -197,3 +195,39 @@ release: CFLAGS = $(CFLAGS_RELEASE)
 release: all
 	@strip $(MAIN_TARGETS) $(TEST_TARGETS)
 	@echo "✅ Release build optimisée"
+
+# Tests de sécurité avec AddressSanitizer
+test-security: CFLAGS += -fsanitize=address -fno-omit-frame-pointer -g
+test-security: clean all
+	@echo "=== TESTS SÉCURITÉ AVEC ADDRESSSANITIZER ==="
+	./$(BUILDDIR)/scientific_validation
+	@echo "=== Tests sécurité terminés ==="
+
+# Tests de performance avec profiling
+test-performance: CFLAGS += -pg -O2
+test-performance: clean all
+	@echo "=== TESTS PERFORMANCE AVEC PROFILING ==="
+	./$(BUILDDIR)/scientific_validation
+	gprof ./$(BUILDDIR)/scientific_validation gmon.out > performance_profile.txt
+	@echo "Profil de performance généré: performance_profile.txt"
+
+# Tests mémoire avec Valgrind
+test-valgrind: clean all
+	@echo "=== TESTS MÉMOIRE AVEC VALGRIND ==="
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all \
+	         --track-origins=yes --verbose --log-file=valgrind_report.txt \
+	         ./$(BUILDDIR)/scientific_validation
+	@echo "Rapport Valgrind généré: valgrind_report.txt"
+
+# Tests de stress 1M LUMs
+test-stress: $(BUILDDIR)/stress_test_1m_lums
+	@echo "=== TESTS DE STRESS 1M LUMS ==="
+	./$(BUILDDIR)/stress_test_1m_lums
+
+# Compilation test de stress
+$(BUILDDIR)/stress_test_1m_lums: tests/stress_test_1m_lums.c $(OBJECTS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Test forensique complet
+test-forensic: test-security test-valgrind test-performance test-stress
+	@echo "=== ANALYSE FORENSIQUE COMPLÈTE TERMINÉE ==="
