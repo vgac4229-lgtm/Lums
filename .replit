@@ -5,7 +5,7 @@ compile = "make"
 
 [nix]
 channel = "stable-25_05"
-packages = ["unzip", "file"]
+packages = ["unzip"]
 
 [deployment]
 deploymentTarget = "autoscale"

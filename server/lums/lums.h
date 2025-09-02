@@ -25,12 +25,6 @@ typedef enum {
     VORAX_ERROR
 } VoraxState;
 
-typedef enum {
-    QUANTUM_IDLE,
-    QUANTUM_ACTIVE,
-    QUANTUM_COLLAPSED
-} QuantumState;
-
 typedef struct {
     double field_strength;
     double coherence;
@@ -59,12 +53,12 @@ typedef enum {
 
 // Core LUM structure
 // Forward declaration for spatial data
-struct SpatialData;
+typedef struct SpatialData SpatialData;
 
 typedef struct {
     uint8_t presence;              // 0 or 1
     LumStructureType structure_type;
-    struct SpatialData* spatial_data;     // Type-safe spatial information
+    SpatialData* spatial_data;     // Type-safe spatial information
     struct {
         int x, y;                  // Position in space
     } position;
@@ -93,20 +87,9 @@ typedef struct LUMGroup {
     void* spatial_data;            // Additional spatial metadata
 } LUMGroup;
 
-// VORAX definitions
-#define MAX_ZONES 128
-#define MAX_MEMORY_SLOTS 128
-#define ERROR_MSG_SIZE 256
-
 // VORAX Zone structure
-typedef struct {
-    char* name;
-    struct {
-        int x, y, width, height;
-    } bounds;
+typedef struct VoraxZone {
     LUMGroup* group;
-    LUM* lums;
-    size_t count;
     uint32_t zone_id;
     SpatialCoordinates position;
     ZoneState state;
@@ -117,32 +100,17 @@ typedef struct {
     char* name;
     LUMGroup* stored_group;
     time_t timestamp;
-    void* data;
-    size_t size;
-    bool allocated;
 } VoraxMemory;
+
+#define MAX_ZONES 16
+#define MAX_MEMORY_SLOTS 32
 
 // VORAX Engine state
 typedef struct {
-    VoraxZone* zones;                // Dynamic array of zones
-    size_t zone_count;
-
-    VoraxMemory* memory_slots;       // Dynamic memory array
-    size_t memory_count;
-
-    char* last_error;
-    char error_message[ERROR_MSG_SIZE];
-    char* zone_names[MAX_ZONES];
-
-    size_t current_tick;
-    double energy_budget;
-
-    // Legacy compatibility
-    LUMGroup* groups;
-    size_t group_count;
-    QuantumState quantum_state;
-    double total_energy;
-    char status[64];
+    VoraxZone* zones[MAX_ZONES];
+    uint32_t active_zones;
+    VoraxState state;
+    QuantumField quantum_field;
 } VoraxEngine;
 
 // Core encoding/decoding functions

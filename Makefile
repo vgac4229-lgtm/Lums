@@ -49,38 +49,35 @@ $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
 	mkdir -p $(BUILDDIR)/$(SRCDIR)
 	mkdir -p $(BUILDDIR)/$(TESTDIR)
-	mkdir -p build/server/lums
-	mkdir -p build/tests
 	mkdir -p logs/scientific_traces
 	mkdir -p logs/performance
 	mkdir -p logs/validation
 	mkdir -p logs/memory
-	mkdir -p logs/inspection_critique
 
 # Compilation objets pour la librairie LUMS
-build/server/lums/decoder.o: server/lums/decoder.c | $(BUILDDIR)
+build/server/lums/decoder.o: server/lums/decoder.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/encoder.o: server/lums/encoder.c | $(BUILDDIR)
+build/server/lums/encoder.o: server/lums/encoder.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/operations.o: server/lums/operations.c | $(BUILDDIR)
+build/server/lums/operations.o: server/lums/operations.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/vorax.o: server/lums/vorax.c | $(BUILDDIR)
+build/server/lums/vorax.o: server/lums/vorax.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/lums_backend.o: server/lums/lums_backend.c | $(BUILDDIR)
+build/server/lums/lums_backend.o: server/lums/lums_backend.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/electromechanical.o: server/lums/electromechanical.c | $(BUILDDIR)
+build/server/lums/electromechanical.o: server/lums/electromechanical.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/electromechanical_impl.o: server/lums/electromechanical_impl.c | $(BUILDDIR)
+build/server/lums/electromechanical_impl.o: server/lums/electromechanical_impl.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/advanced-math.o: server/lums/advanced-math.c | $(BUILDDIR)
+build/server/lums/advanced-math.o: server/lums/advanced-math.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/lumgroup.o: server/lums/lumgroup.c | $(BUILDDIR)
+build/server/lums/lumgroup.o: server/lums/lumgroup.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/jit_compiler.o: server/lums/jit_compiler.c | $(BUILDDIR)
+build/server/lums/jit_compiler.o: server/lums/jit_compiler.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/vorax_simple.o: server/lums/vorax_simple.c | $(BUILDDIR)
+build/server/lums/vorax_simple.o: server/lums/vorax_simple.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/scientific_logger.o: server/lums/scientific_logger.c | $(BUILDDIR)
+build/server/lums/scientific_logger.o: server/lums/scientific_logger.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compilation objets pour les tests
@@ -274,17 +271,3 @@ help:
 	@echo "  clean            - Nettoyage build"
 	@echo "  clean-all        - Nettoyage complet"
 	@echo "  ci               - Pipeline CI/CD complet"
-	@echo "  generate_forensic_logs - Génère les logs forensiques corrigés"
-
-display_logs:
-	@echo "=== AFFICHAGE RÉSULTATS LOGS ==="
-	@if [ -f logs/scientific_traces/lums_operations.jsonl ]; then \
-		tail -2 logs/scientific_traces/lums_operations.jsonl; \
-	else \
-		echo "Aucun log disponible"; \
-	fi
-
-generate_forensic_logs:
-	@echo "=== GÉNÉRATION LOGS FORENSIQUES CORRIGÉS ==="
-	@chmod +x scripts/generate_forensic_logs.sh
-	@./scripts/generate_forensic_logs.sh
