@@ -1,0 +1,10 @@
+{"timestamp_ns":1756808096320810000,"op_id":1,"operation":"BACKEND_INIT","input":"0x0","result":"0x0","time_ms":0.000000,"energy_cost":0}
+{"timestamp_ns":1756808096341312000,"op_id":2,"operation":"LUM_FUSION","input":"0xd300000065","result":"0xf7","time_ms":20.381000,"energy_cost":22}
+{"timestamp_ns":1756808096351592000,"op_id":3,"operation":"LUM_SPLIT","input":"0xf7","result":"0x3","time_ms":10.168000,"energy_cost":59}
+{"timestamp_ns":1756808096399086000,"op_id":4,"operation":"LUM_CYCLE","input":"0xf7","result":"0x1","time_ms":47.422000,"energy_cost":95}
+{"timestamp_ns":1756808096399267000,"op_id":5,"operation":"MEMORY_STORE","input":"0x1","result":"0xa","time_ms":0.000000,"energy_cost":95}
+{"timestamp_ns":1756808096399302000,"op_id":6,"operation":"MEMORY_RETRIEVE","input":"0xa","result":"0x1","time_ms":0.000000,"energy_cost":95}
+{"timestamp_ns":1756808096459711000,"op_id":7,"operation":"MATH_SQRT","input":"0x4050000000000000","result":"0x4020000000000000","time_ms":60.323000,"energy_cost":134}
+{"timestamp_ns":1756808096470024000,"op_id":8,"operation":"PRIME_TEST_TRUE","input":"0x61","result":"0x4","time_ms":10.165000,"energy_cost":154}
+{"timestamp_ns":1756808096470063000,"op_id":9,"operation":"PRIME_TEST_FALSE","input":"0x5b","result":"0x7","time_ms":0.000000,"energy_cost":165}
+{"timestamp_ns":1756808096470125000,"op_id":10,"operation":"BACKEND_CLEANUP","input":"0x0","result":"0x6","time_ms":0.000000,"energy_cost":165}
