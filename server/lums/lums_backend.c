@@ -1,12 +1,12 @@
+#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
+#include <time.h>
+#include <unistd.h>
 #include "lums_backend.h"
 #include "lums.h"
 #include "electromechanical.h"
 
-// Fix compilation errors
-#define _POSIX_C_SOURCE 199309L
-
-// Forward declarations
-typedef struct ElectromechanicalState ElectromechanicalState;
+// Forward declarations - ElectromechanicalState is already defined in electromechanical.h
 typedef struct MemoryBlock {
     uint64_t data;
     uint64_t timestamp;

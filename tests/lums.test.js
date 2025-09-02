@@ -3,8 +3,8 @@ const fs = require('fs');
 
 describe('LUMS System Complete Tests', () => {
   beforeAll(() => {
-    // Compile the C library
-    execSync('make clean && make all', { cwd: '.' });
+    // Ensure build directory exists and compile the C library
+    execSync('mkdir -p build/server/lums && make all', { cwd: '.' });
   });
 
   describe('Basic LUMS Operations', () => {

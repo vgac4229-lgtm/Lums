@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -8,16 +10,15 @@
 #include <immintrin.h>  // AVX2/SIMD
 #include "lums_backend.h"
 
-// Détection runtime des capacités SIMD
-static bool simd_available = false;
+// Détection runtime des capacités SIMD - simd_available est déjà défini dans lums_backend.h
 
 void init_simd_support() {
     __builtin_cpu_init();
     simd_available = __builtin_cpu_supports("avx2");
 }
 
-// Logs scientifiques avec timestamps nanosecondes
-static void log_scientific_operation(const char* operation, double input, double result, long duration_ns) {
+// Logs scientifiques avec timestamps nanosecondes - fonction déjà déclarée dans lums_backend.h
+void log_scientific_operation_impl(const char* operation, double input, double result, long duration_ns) {
     FILE* log_file = fopen("logs/scientific_traces/lums_operations.jsonl", "a");
     if (log_file) {
         fprintf(log_file, 
@@ -58,7 +59,7 @@ void lums_fusion_vectorized(double* lums_a, double* lums_b, double* result, size
     long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + 
                        (end.tv_nsec - start.tv_nsec);
 
-    log_scientific_operation("VECTORIZED_FUSION", (double)count, 0.0, duration_ns);
+    log_scientific_operation_impl("VECTORIZED_FUSION", (double)count, 0.0, duration_ns);
 }
 
 
@@ -66,7 +67,7 @@ void lums_fusion_vectorized(double* lums_a, double* lums_b, double* result, size
 double lums_sqrt_newton_raphson(double x, double precision) {
     if (x < 0) {
         // Gestion révolutionnaire: transformation géométrique au lieu d'erreur
-        log_scientific_operation("SQRT_NEGATIVE", x, NAN, 0);
+        log_scientific_operation_impl("SQRT_NEGATIVE", x, NAN, 0);
         return NAN; // Pour l'instant, sera remplacé par transformation spatiale
     }
 
@@ -89,7 +90,7 @@ double lums_sqrt_newton_raphson(double x, double precision) {
     clock_gettime(CLOCK_MONOTONIC, &end);
     long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
 
-    log_scientific_operation("SQRT_NEWTON_RAPHSON", x, guess, duration_ns);
+    log_scientific_operation_impl("SQRT_NEWTON_RAPHSON", x, guess, duration_ns);
     return guess;
 }
 
@@ -140,14 +141,14 @@ bool lums_is_prime_miller_rabin(uint64_t n, int k) {
         if (composite) {
             clock_gettime(CLOCK_MONOTONIC, &end);
             long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
-            log_scientific_operation("PRIME_TEST_COMPOSITE", (double)n, 0.0, duration_ns);
+            log_scientific_operation_impl("PRIME_TEST_COMPOSITE", (double)n, 0.0, duration_ns);
             return false;
         }
     }
 
     clock_gettime(CLOCK_MONOTONIC, &end);
     long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
-    log_scientific_operation("PRIME_TEST_PROBABLE", (double)n, 1.0, duration_ns);
+    log_scientific_operation_impl("PRIME_TEST_PROBABLE", (double)n, 1.0, duration_ns);
     return true;
 }
 
@@ -196,6 +197,6 @@ uint64_t lums_fibonacci_authentic(int n) {
     clock_gettime(CLOCK_MONOTONIC, &end);
     long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
 
-    log_scientific_operation("FIBONACCI", (double)n, (double)b, duration_ns);
+    log_scientific_operation_impl("FIBONACCI", (double)n, (double)b, duration_ns);
     return b;
 }

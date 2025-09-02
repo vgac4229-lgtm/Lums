@@ -68,7 +68,7 @@ void lums_fusion_vectorized(double* lums_a, double* lums_b, double* result, size
 int lums_backend_init(void);
 void lums_backend_cleanup(void);
 int lums_compute_fusion_real(uint64_t lum_a, uint64_t lum_b, uint64_t* result);
-int lums_compute_split_real(uint64_t lum_input, int zones, uint64_t* results);
+int lums_compute_split_real(uint64_t lum_source, uint64_t* result_a, uint64_t* result_b);
 int lums_compute_cycle_real(uint64_t lum_input, int modulo, uint64_t* result);
 
 // Métriques et status
@@ -79,5 +79,6 @@ void lums_backend_status_report(void);
 
 // Tests
 int lums_backend_comprehensive_test(void);
+char* uint64_to_binary_string(uint64_t value);
 
 #endif // LUMS_BACKEND_H

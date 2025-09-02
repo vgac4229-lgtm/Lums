@@ -51,19 +51,6 @@ typedef enum {
     GROUP_HARMONIC = 7
 } GroupType;
 
-// Core LUM structure
-// Forward declaration for spatial data
-typedef struct SpatialData SpatialData;
-
-typedef struct {
-    uint8_t presence;              // 0 or 1
-    LumStructureType structure_type;
-    SpatialData* spatial_data;     // Type-safe spatial information
-    struct {
-        int x, y;                  // Position in space
-    } position;
-} LUM;
-
 // Type-safe spatial data structure
 typedef struct SpatialData {
     enum { SPATIAL_NONE, SPATIAL_METADATA, SPATIAL_FLOW } type;
@@ -75,6 +62,16 @@ typedef struct SpatialData {
         } flow_data;
     } data;
 } SpatialData;
+
+// Core LUM structure
+typedef struct {
+    uint8_t presence;              // 0 or 1
+    LumStructureType structure_type;
+    SpatialData* spatial_data;     // Type-safe spatial information
+    struct {
+        int x, y;                  // Position in space
+    } position;
+} LUM;
 
 // LUM Group structure
 typedef struct LUMGroup {
@@ -88,11 +85,17 @@ typedef struct LUMGroup {
 } LUMGroup;
 
 // VORAX Zone structure
+typedef struct {
+    int x, y, width, height;
+} ZoneBounds;
+
 typedef struct VoraxZone {
-    LUMGroup* group;
-    uint32_t zone_id;
-    SpatialCoordinates position;
-    ZoneState state;
+    char* name;                    // Zone name
+    LUMGroup* group;               // LUM group in this zone
+    ZoneBounds bounds;             // Zone bounds
+    uint32_t zone_id;              // Zone ID
+    SpatialCoordinates position;   // Spatial position
+    ZoneState state;               // Zone state
 } VoraxZone;
 
 // VORAX Memory structure
@@ -107,10 +110,17 @@ typedef struct {
 
 // VORAX Engine state
 typedef struct {
-    VoraxZone* zones[MAX_ZONES];
-    uint32_t active_zones;
-    VoraxState state;
-    QuantumField quantum_field;
+    VoraxZone* zones;              // Dynamic array of zones
+    size_t zone_count;             // Number of zones
+    VoraxMemory* memory_slots;     // Dynamic array of memory slots
+    size_t memory_count;           // Number of memory slots
+    char* last_error;              // Last error message
+    char error_message[256];       // Error message buffer
+    char* zone_names[MAX_ZONES];   // Zone names array
+    uint32_t current_tick;         // Current tick counter
+    double energy_budget;          // Energy budget
+    VoraxState state;              // Engine state
+    QuantumField quantum_field;    // Quantum field
 } VoraxEngine;
 
 // Core encoding/decoding functions

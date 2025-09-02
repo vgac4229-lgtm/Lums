@@ -3,7 +3,7 @@
 
 # Configuration de base
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare
+CFLAGS = -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare -mavx2 -mfma
 SRCDIR = server/lums
 BUILDDIR = build
 TESTDIR = tests

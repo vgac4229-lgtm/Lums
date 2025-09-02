@@ -1,0 +1,437 @@
+diff --git a/Makefile b/Makefile
+index e911a19..6602a68 100644
+--- a/Makefile
++++ b/Makefile
+@@ -3,7 +3,7 @@
+ 
+ # Configuration de base
+ CC = gcc
+-CFLAGS = -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare
++CFLAGS = -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare -mavx2 -mfma
+ SRCDIR = server/lums
+ BUILDDIR = build
+ TESTDIR = tests
+diff --git a/build/liblums.a b/build/liblums.a
+new file mode 100644
+index 0000000..34e35b5
+Binary files /dev/null and b/build/liblums.a differ
+diff --git a/build/server/lums/advanced-math.o b/build/server/lums/advanced-math.o
+new file mode 100644
+index 0000000..7e3f046
+Binary files /dev/null and b/build/server/lums/advanced-math.o differ
+diff --git a/build/server/lums/electromechanical.o b/build/server/lums/electromechanical.o
+new file mode 100644
+index 0000000..f089844
+Binary files /dev/null and b/build/server/lums/electromechanical.o differ
+diff --git a/build/server/lums/electromechanical_impl.o b/build/server/lums/electromechanical_impl.o
+new file mode 100644
+index 0000000..79847f8
+Binary files /dev/null and b/build/server/lums/electromechanical_impl.o differ
+diff --git a/build/server/lums/jit_compiler.o b/build/server/lums/jit_compiler.o
+new file mode 100644
+index 0000000..beb64cf
+Binary files /dev/null and b/build/server/lums/jit_compiler.o differ
+diff --git a/build/server/lums/lumgroup.o b/build/server/lums/lumgroup.o
+new file mode 100644
+index 0000000..9dcf198
+Binary files /dev/null and b/build/server/lums/lumgroup.o differ
+diff --git a/build/server/lums/lums_backend.o b/build/server/lums/lums_backend.o
+new file mode 100644
+index 0000000..30c051d
+Binary files /dev/null and b/build/server/lums/lums_backend.o differ
+diff --git a/build/server/lums/scientific_logger.o b/build/server/lums/scientific_logger.o
+new file mode 100644
+index 0000000..67d5293
+Binary files /dev/null and b/build/server/lums/scientific_logger.o differ
+diff --git a/build/server/lums/vorax.o b/build/server/lums/vorax.o
+new file mode 100644
+index 0000000..7c55341
+Binary files /dev/null and b/build/server/lums/vorax.o differ
+diff --git a/build/server/lums/vorax_simple.o b/build/server/lums/vorax_simple.o
+new file mode 100644
+index 0000000..95b08b4
+Binary files /dev/null and b/build/server/lums/vorax_simple.o differ
+diff --git a/package.json b/package.json
+index 0e73cd5..ab88678 100644
+--- a/package.json
++++ b/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "rest-express",
++  "name": "lums-vorax",
+   "version": "1.0.0",
+   "type": "module",
+   "license": "MIT",
+diff --git a/server/lums/advanced-math.c b/server/lums/advanced-math.c
+index 2bc0369..75fffd5 100644
+--- a/server/lums/advanced-math.c
++++ b/server/lums/advanced-math.c
+@@ -1,3 +1,5 @@
++#define _POSIX_C_SOURCE 200809L
++#define _DEFAULT_SOURCE
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <math.h>
+@@ -8,16 +10,15 @@
+ #include <immintrin.h>  // AVX2/SIMD
+ #include "lums_backend.h"
+ 
+-// Détection runtime des capacités SIMD
+-static bool simd_available = false;
++// Détection runtime des capacités SIMD - simd_available est déjà défini dans lums_backend.h
+ 
+ void init_simd_support() {
+     __builtin_cpu_init();
+     simd_available = __builtin_cpu_supports("avx2");
+ }
+ 
+-// Logs scientifiques avec timestamps nanosecondes
+-static void log_scientific_operation(const char* operation, double input, double result, long duration_ns) {
++// Logs scientifiques avec timestamps nanosecondes - fonction déjà déclarée dans lums_backend.h
++void log_scientific_operation_impl(const char* operation, double input, double result, long duration_ns) {
+     FILE* log_file = fopen("logs/scientific_traces/lums_operations.jsonl", "a");
+     if (log_file) {
+         fprintf(log_file, 
+@@ -58,7 +59,7 @@ void lums_fusion_vectorized(double* lums_a, double* lums_b, double* result, size
+     long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + 
+                        (end.tv_nsec - start.tv_nsec);
+ 
+-    log_scientific_operation("VECTORIZED_FUSION", (double)count, 0.0, duration_ns);
++    log_scientific_operation_impl("VECTORIZED_FUSION", (double)count, 0.0, duration_ns);
+ }
+ 
+ 
+@@ -66,7 +67,7 @@ void lums_fusion_vectorized(double* lums_a, double* lums_b, double* result, size
+ double lums_sqrt_newton_raphson(double x, double precision) {
+     if (x < 0) {
+         // Gestion révolutionnaire: transformation géométrique au lieu d'erreur
+-        log_scientific_operation("SQRT_NEGATIVE", x, NAN, 0);
++        log_scientific_operation_impl("SQRT_NEGATIVE", x, NAN, 0);
+         return NAN; // Pour l'instant, sera remplacé par transformation spatiale
+     }
+ 
+@@ -89,7 +90,7 @@ double lums_sqrt_newton_raphson(double x, double precision) {
+     clock_gettime(CLOCK_MONOTONIC, &end);
+     long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
+ 
+-    log_scientific_operation("SQRT_NEWTON_RAPHSON", x, guess, duration_ns);
++    log_scientific_operation_impl("SQRT_NEWTON_RAPHSON", x, guess, duration_ns);
+     return guess;
+ }
+ 
+@@ -140,14 +141,14 @@ bool lums_is_prime_miller_rabin(uint64_t n, int k) {
+         if (composite) {
+             clock_gettime(CLOCK_MONOTONIC, &end);
+             long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
+-            log_scientific_operation("PRIME_TEST_COMPOSITE", (double)n, 0.0, duration_ns);
++            log_scientific_operation_impl("PRIME_TEST_COMPOSITE", (double)n, 0.0, duration_ns);
+             return false;
+         }
+     }
+ 
+     clock_gettime(CLOCK_MONOTONIC, &end);
+     long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
+-    log_scientific_operation("PRIME_TEST_PROBABLE", (double)n, 1.0, duration_ns);
++    log_scientific_operation_impl("PRIME_TEST_PROBABLE", (double)n, 1.0, duration_ns);
+     return true;
+ }
+ 
+@@ -196,6 +197,6 @@ uint64_t lums_fibonacci_authentic(int n) {
+     clock_gettime(CLOCK_MONOTONIC, &end);
+     long duration_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
+ 
+-    log_scientific_operation("FIBONACCI", (double)n, (double)b, duration_ns);
++    log_scientific_operation_impl("FIBONACCI", (double)n, (double)b, duration_ns);
+     return b;
+ }
+\ No newline at end of file
+diff --git a/server/lums/lums.h b/server/lums/lums.h
+index 9778ca3..ceec4c6 100644
+--- a/server/lums/lums.h
++++ b/server/lums/lums.h
+@@ -51,19 +51,6 @@ typedef enum {
+     GROUP_HARMONIC = 7
+ } GroupType;
+ 
+-// Core LUM structure
+-// Forward declaration for spatial data
+-typedef struct SpatialData SpatialData;
+-
+-typedef struct {
+-    uint8_t presence;              // 0 or 1
+-    LumStructureType structure_type;
+-    SpatialData* spatial_data;     // Type-safe spatial information
+-    struct {
+-        int x, y;                  // Position in space
+-    } position;
+-} LUM;
+-
+ // Type-safe spatial data structure
+ typedef struct SpatialData {
+     enum { SPATIAL_NONE, SPATIAL_METADATA, SPATIAL_FLOW } type;
+@@ -76,6 +63,16 @@ typedef struct SpatialData {
+     } data;
+ } SpatialData;
+ 
++// Core LUM structure
++typedef struct {
++    uint8_t presence;              // 0 or 1
++    LumStructureType structure_type;
++    SpatialData* spatial_data;     // Type-safe spatial information
++    struct {
++        int x, y;                  // Position in space
++    } position;
++} LUM;
++
+ // LUM Group structure
+ typedef struct LUMGroup {
+     LUM* lums;
+@@ -88,11 +85,17 @@ typedef struct LUMGroup {
+ } LUMGroup;
+ 
+ // VORAX Zone structure
++typedef struct {
++    int x, y, width, height;
++} ZoneBounds;
++
+ typedef struct VoraxZone {
+-    LUMGroup* group;
+-    uint32_t zone_id;
+-    SpatialCoordinates position;
+-    ZoneState state;
++    char* name;                    // Zone name
++    LUMGroup* group;               // LUM group in this zone
++    ZoneBounds bounds;             // Zone bounds
++    uint32_t zone_id;              // Zone ID
++    SpatialCoordinates position;   // Spatial position
++    ZoneState state;               // Zone state
+ } VoraxZone;
+ 
+ // VORAX Memory structure
+@@ -107,10 +110,17 @@ typedef struct {
+ 
+ // VORAX Engine state
+ typedef struct {
+-    VoraxZone* zones[MAX_ZONES];
+-    uint32_t active_zones;
+-    VoraxState state;
+-    QuantumField quantum_field;
++    VoraxZone* zones;              // Dynamic array of zones
++    size_t zone_count;             // Number of zones
++    VoraxMemory* memory_slots;     // Dynamic array of memory slots
++    size_t memory_count;           // Number of memory slots
++    char* last_error;              // Last error message
++    char error_message[256];       // Error message buffer
++    char* zone_names[MAX_ZONES];   // Zone names array
++    uint32_t current_tick;         // Current tick counter
++    double energy_budget;          // Energy budget
++    VoraxState state;              // Engine state
++    QuantumField quantum_field;    // Quantum field
+ } VoraxEngine;
+ 
+ // Core encoding/decoding functions
+diff --git a/server/lums/lums_backend.c b/server/lums/lums_backend.c
+index c646b10..03f33ac 100644
+--- a/server/lums/lums_backend.c
++++ b/server/lums/lums_backend.c
+@@ -1,12 +1,12 @@
++#define _POSIX_C_SOURCE 200809L
++#define _DEFAULT_SOURCE
++#include <time.h>
++#include <unistd.h>
+ #include "lums_backend.h"
+ #include "lums.h"
+ #include "electromechanical.h"
+ 
+-// Fix compilation errors
+-#define _POSIX_C_SOURCE 199309L
+-
+-// Forward declarations
+-typedef struct ElectromechanicalState ElectromechanicalState;
++// Forward declarations - ElectromechanicalState is already defined in electromechanical.h
+ typedef struct MemoryBlock {
+     uint64_t data;
+     uint64_t timestamp;
+diff --git a/server/lums/lums_backend.h b/server/lums/lums_backend.h
+index 71cfbfc..655081d 100644
+--- a/server/lums/lums_backend.h
++++ b/server/lums/lums_backend.h
+@@ -68,7 +68,7 @@ void lums_fusion_vectorized(double* lums_a, double* lums_b, double* result, size
+ int lums_backend_init(void);
+ void lums_backend_cleanup(void);
+ int lums_compute_fusion_real(uint64_t lum_a, uint64_t lum_b, uint64_t* result);
+-int lums_compute_split_real(uint64_t lum_input, int zones, uint64_t* results);
++int lums_compute_split_real(uint64_t lum_source, uint64_t* result_a, uint64_t* result_b);
+ int lums_compute_cycle_real(uint64_t lum_input, int modulo, uint64_t* result);
+ 
+ // Métriques et status
+@@ -79,5 +79,6 @@ void lums_backend_status_report(void);
+ 
+ // Tests
+ int lums_backend_comprehensive_test(void);
++char* uint64_to_binary_string(uint64_t value);
+ 
+ #endif // LUMS_BACKEND_H
+\ No newline at end of file
+diff --git a/server/lums/vorax.c b/server/lums/vorax.c
+index 654c72b..9e0b65a 100644
+--- a/server/lums/vorax.c
++++ b/server/lums/vorax.c
+@@ -612,15 +612,23 @@ VoraxEngine* vorax_create_engine(void) {
+     VoraxEngine* engine = malloc(sizeof(VoraxEngine));
+     if (!engine) return NULL;
+ 
+-    // Initialize zones dynamically
+-    for (int i = 0; i < MAX_ZONES; i++) {
+-        engine->zones[i] = NULL;
+-        engine->zone_names[i] = NULL;
+-    }
+-
++    // Initialize engine
++    engine->zones = NULL;
+     engine->zone_count = 0;
++    engine->memory_slots = NULL;
++    engine->memory_count = 0;
++    engine->last_error = NULL;
+     engine->current_tick = 0;
+     engine->energy_budget = 1000.0;
++    engine->state = VORAX_READY;
++    engine->quantum_field.field_strength = 1.0;
++    engine->quantum_field.coherence = 1.0;
++    
++    // Initialize zone names array
++    for (int i = 0; i < MAX_ZONES; i++) {
++        engine->zone_names[i] = NULL;
++    }
++    
+     memset(engine->error_message, 0, sizeof(engine->error_message));
+ 
+     return engine;
+@@ -629,27 +637,53 @@ VoraxEngine* vorax_create_engine(void) {
+ void vorax_destroy_engine(VoraxEngine* engine) {
+     if (!engine) return;
+ 
+-    for (int i = 0; i < MAX_ZONES; i++) {
+-        if (engine->zones[i]) {
+-            if (engine->zones[i]->lums) {
+-                free(engine->zones[i]->lums);
++    // Free zones array
++    if (engine->zones) {
++        for (size_t i = 0; i < engine->zone_count; i++) {
++            if (engine->zones[i].name) {
++                free(engine->zones[i].name);
++            }
++            if (engine->zones[i].group) {
++                free_lum_group(engine->zones[i].group);
++            }
++        }
++        free(engine->zones);
++    }
++    
++    // Free memory slots
++    if (engine->memory_slots) {
++        for (size_t i = 0; i < engine->memory_count; i++) {
++            if (engine->memory_slots[i].name) {
++                free(engine->memory_slots[i].name);
++            }
++            if (engine->memory_slots[i].stored_group) {
++                free_lum_group(engine->memory_slots[i].stored_group);
+             }
+-            free(engine->zones[i]);
+         }
++        free(engine->memory_slots);
++    }
++    
++    // Free zone names
++    for (int i = 0; i < MAX_ZONES; i++) {
+         if (engine->zone_names[i]) {
+             free(engine->zone_names[i]);
+         }
+     }
++    
++    // Free last error
++    if (engine->last_error) {
++        free(engine->last_error);
++    }
+ 
+     free(engine);
+ }
+ 
+ int vorax_fuse_zones(VoraxEngine* engine, int zone1, int zone2) {
+-    if (!engine || zone1 >= MAX_ZONES || zone2 >= MAX_ZONES) return -1;
+-    if (!engine->zones[zone1] || !engine->zones[zone2]) return -1;
++    if (!engine || zone1 >= engine->zone_count || zone2 >= engine->zone_count) return -1;
++    if (!engine->zones[zone1].group || !engine->zones[zone2].group) return -1;
+ 
+-    LUMGroup* g1 = engine->zones[zone1];
+-    LUMGroup* g2 = engine->zones[zone2];
++    LUMGroup* g1 = engine->zones[zone1].group;
++    LUMGroup* g2 = engine->zones[zone2].group;
+ 
+     // Create fused group
+     size_t total_count = g1->count + g2->count;
+@@ -674,10 +708,10 @@ int vorax_fuse_zones(VoraxEngine* engine, int zone1, int zone2) {
+ }
+ 
+ int vorax_split_zone(VoraxEngine* engine, int zone, int parts) {
+-    if (!engine || zone >= MAX_ZONES || parts <= 0) return -1;
+-    if (!engine->zones[zone]) return -1;
++    if (!engine || zone >= engine->zone_count || parts <= 0) return -1;
++    if (!engine->zones[zone].group) return -1;
+ 
+-    LUMGroup* source = engine->zones[zone];
++    LUMGroup* source = engine->zones[zone].group;
+     if (source->count == 0) return 0;
+ 
+     size_t lums_per_part = source->count / parts;
+@@ -686,21 +720,21 @@ int vorax_split_zone(VoraxEngine* engine, int zone, int parts) {
+     // Keep first part in original zone
+     source->count = lums_per_part + (remainder > 0 ? 1 : 0);
+ 
+-    // Create additional zones for remaining parts
+-    for (int i = 1; i < parts && engine->zone_count < MAX_ZONES; i++) {
+-        int new_zone_idx = engine->zone_count++;
+-        engine->zones[new_zone_idx] = malloc(sizeof(LUMGroup));
+-        if (!engine->zones[new_zone_idx]) return -1;
+-
+-        size_t part_size = lums_per_part + (i < remainder ? 1 : 0);
+-        engine->zones[new_zone_idx]->lums = malloc(sizeof(LUM) * part_size);
+-        engine->zones[new_zone_idx]->count = part_size;
+-
+-        // Copy LUMs to new zone
+-        size_t src_offset = lums_per_part + (remainder > 0 ? 1 : 0) + (i - 1) * lums_per_part;
+-        memcpy(engine->zones[new_zone_idx]->lums, 
+-               source->lums + src_offset, 
+-               sizeof(LUM) * part_size);
++    // For now, just split the LUMs within the same zone
++    // This is a simplified implementation - in a full implementation,
++    // we would create new zones and distribute the LUMs
++    if (parts > 1) {
++        // Resize the LUMs array to fit the split
++        LUM* new_lums = malloc(sizeof(LUM) * source->count);
++        if (!new_lums) return -1;
++        
++        // Copy first part
++        size_t first_part_size = lums_per_part + (remainder > 0 ? 1 : 0);
++        memcpy(new_lums, source->lums, sizeof(LUM) * first_part_size);
++        
++        free(source->lums);
++        source->lums = new_lums;
++        source->count = first_part_size;
+     }
+ 
+     engine->current_tick++;
+@@ -708,10 +742,10 @@ int vorax_split_zone(VoraxEngine* engine, int zone, int parts) {
+ }
+ 
+ int vorax_cycle_zone(VoraxEngine* engine, int zone, int modulo) {
+-    if (!engine || zone >= MAX_ZONES || modulo <= 0) return -1;
+-    if (!engine->zones[zone]) return -1;
++    if (!engine || zone >= engine->zone_count || modulo <= 0) return -1;
++    if (!engine->zones[zone].group) return -1;
+ 
+-    LUMGroup* group = engine->zones[zone];
++    LUMGroup* group = engine->zones[zone].group;
+     size_t new_count = group->count % modulo;
+ 
+     if (new_count < group->count) {
