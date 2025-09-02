@@ -53,12 +53,12 @@ typedef enum {
 
 // Core LUM structure
 // Forward declaration for spatial data
-typedef struct SpatialData SpatialData;
+struct SpatialData;
 
 typedef struct {
     uint8_t presence;              // 0 or 1
     LumStructureType structure_type;
-    SpatialData* spatial_data;     // Type-safe spatial information
+    struct SpatialData* spatial_data;     // Type-safe spatial information
     struct {
         int x, y;                  // Position in space
     } position;

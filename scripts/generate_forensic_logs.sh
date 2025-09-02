@@ -2,9 +2,9 @@
 #!/bin/bash
 
 # Génération logs forensiques avec timestamp fixe
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-LOG_DIR="logs/inspection_critique_${TIMESTAMP}"
-EXECUTION_LOG="${LOG_DIR}/execution_complete.log"
+export TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+export LOG_DIR="logs/inspection_critique_${TIMESTAMP}"
+export EXECUTION_LOG="${LOG_DIR}/execution_complete.log"
 
 echo "=== SCRIPT GÉNÉRATION LOGS FORENSIQUES CORRIGÉ ==="
 echo "Timestamp session: ${TIMESTAMP}"
