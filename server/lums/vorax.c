@@ -513,14 +513,29 @@ LUMGroup* create_lum_group(LUM* lums, size_t count, GroupType type) {
         // Generate cryptographically secure UUID v4
         uint8_t uuid_bytes[16];
 
-        // Use time-based seed with process ID for uniqueness
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        unsigned int seed = (unsigned int)(ts.tv_sec ^ ts.tv_nsec ^ getpid());
-        srand(seed);
-
-        for (int i = 0; i < 16; i++) {
-            uuid_bytes[i] = (uint8_t)(rand() % 256);
+        // Use cryptographically secure random source
+        FILE* urandom = fopen("/dev/urandom", "rb");
+        if (urandom) {
+            if (fread(uuid_bytes, 1, 16, urandom) != 16) {
+                // Fallback to time-based if urandom fails
+                struct timespec ts;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                unsigned int seed = (unsigned int)(ts.tv_sec ^ ts.tv_nsec ^ getpid());
+                srand(seed);
+                for (int i = 0; i < 16; i++) {
+                    uuid_bytes[i] = (uint8_t)(rand() % 256);
+                }
+            }
+            fclose(urandom);
+        } else {
+            // Fallback to time-based
+            struct timespec ts;
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            unsigned int seed = (unsigned int)(ts.tv_sec ^ ts.tv_nsec ^ getpid());
+            srand(seed);
+            for (int i = 0; i < 16; i++) {
+                uuid_bytes[i] = (uint8_t)(rand() % 256);
+            }
         }
 
         // Set version (4) and variant bits according to RFC 4122
