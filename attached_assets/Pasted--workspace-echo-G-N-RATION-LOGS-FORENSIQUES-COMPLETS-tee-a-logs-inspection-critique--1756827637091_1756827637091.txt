@@ -1,3 +1,17 @@
+~/workspace$ echo "=== GÉNÉRATION LOGS FORENSIQUES COMPLETS ===" | tee -a logs/inspection_critique_$(date +%Y%m%d_%H%M%S)/execution_complete.log
+tee: logs/inspection_critique_20250902_153926/execution_complete.log: No such file or directory
+=== GÉNÉRATION LOGS FORENSIQUES COMPLETS ===
+~/workspace$ ls -la logs/scientific_traces/ | tee -a logs/inspection_critique_$(date +%Y%m%d_%H%M%S)/execution_complete.log
+tee: logs/inspection_critique_20250902_153926/execution_complete.log: No such file or directory
+total 16
+drwxr-xr-x 1 runner runner  140 Sep  2 12:29 .
+drwxr-xr-x 1 runner runner  562 Sep  2 15:39 ..
+-rw-r--r-- 1 runner runner 3038 Sep  2 12:25 execution_log.md
+-rw-r--r-- 1 runner runner 1445 Sep  2 15:39 lums_operations.jsonl
+-rw-r--r-- 1 runner runner 1641 Sep  2 12:25 README.md
+-rw-r--r-- 1 runner runner  262 Sep  2 12:29 validation_results.jsonl
+~/workspace$ cat logs/scientific_traces/lums_operations.jsonl | tail -20 | tee -a logs/inspection_critique_$(date +%Y%m%d_%H%M%S)/execution_complete.log
+tee: logs/inspection_critique_20250902_153926/execution_complete.log: No such file or directory
 {"timestamp_ns":1756827561942003000,"op_id":1,"operation":"BACKEND_INIT","input":"0x0","result":"0x0","time_ms":0.000000,"energy_cost":0}
 {"timestamp_ns":1756827561962337000,"op_id":2,"operation":"LUM_FUSION","input":"0xd300000065","result":"0xf7","time_ms":20.300000,"energy_cost":22}
 {"timestamp_ns":1756827561972509000,"op_id":3,"operation":"LUM_SPLIT","input":"0xf7","result":"0x3","time_ms":10.123000,"energy_cost":59}
@@ -8,3 +22,7 @@
 {"timestamp_ns":1756827562064791000,"op_id":8,"operation":"PRIME_TEST_TRUE","input":"0x61","result":"0x4","time_ms":10.145000,"energy_cost":154}
 {"timestamp_ns":1756827562064884000,"op_id":9,"operation":"PRIME_TEST_FALSE","input":"0x5b","result":"0x7","time_ms":0.000000,"energy_cost":165}
 {"timestamp_ns":1756827562064916000,"op_id":10,"operation":"BACKEND_CLEANUP","input":"0x0","result":"0x6","time_ms":0.000000,"energy_cost":165}
+~/workspace$ 
+
+
+
