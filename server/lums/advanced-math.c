@@ -45,7 +45,7 @@ void lums_fusion_vectorized(double* lums_a, double* lums_b, double* result, size
 
         // Traitement scalaire pour le reste
         for (size_t i = vector_count; i < count; i++) {
-            result[i] = lums_a[i] + lums_b[i];
+            result[i] = lums_a[i] + lums_a[i];
         }
     } else {
         // Fallback scalaire
@@ -157,7 +157,7 @@ bool validate_lum_conservation(size_t total_before, size_t total_after, const ch
         struct timeval tv;
         gettimeofday(&tv, NULL);
         uint64_t timestamp_ns = (uint64_t)tv.tv_sec * 1000000000ULL + (uint64_t)tv.tv_usec * 1000ULL;
-        
+
         FILE* violation_log = fopen("logs/scientific_traces/conservation_violations.jsonl", "a");
         if (violation_log) {
             fprintf(violation_log, 

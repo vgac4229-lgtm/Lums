@@ -161,6 +161,11 @@ const char* lums_backend_get_status(void) {
     return status_buffer;
 }
 
+void log_scientific_operation(const char* operation, double input, double result, long duration_ns) {
+    printf("[SCIENTIFIC_LOG] %s: %.6f → %.6f (%ld ns)\n", 
+           operation, input, result, duration_ns);
+}
+
 void lums_backend_status_report(void) {
     printf("=== RAPPORT STATUS LUMS BACKEND ===\n");
     printf("État: %s\n", backend_initialized ? "✅ ACTIF" : "❌ INACTIF");

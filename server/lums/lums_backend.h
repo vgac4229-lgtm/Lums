@@ -59,7 +59,7 @@ uint64_t get_nanosecond_timestamp(void);
 void log_scientific_operation(const char* operation, double input, double result, long duration_ns);
 
 // Fonctions SIMD et optimisation
-extern bool simd_available;
+static bool simd_available = false;
 void init_simd_support(void);
 void lums_fusion_vectorized(double* lums_a, double* lums_b, double* result, size_t count);
 
