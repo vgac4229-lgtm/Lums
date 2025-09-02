@@ -7,7 +7,7 @@
 // Assuming LOG_ERROR macro is defined elsewhere, e.g., in "log.h"
 // For this example, let's define a simple placeholder:
 #ifndef LOG_ERROR
-#define LOG_ERROR(msg, ...) fprintf(stderr, "ERROR: " msg "\n", ##__VA_ARGS__)
+#define LOG_ERROR(...) fprintf(stderr, "ERROR: " __VA_ARGS__); fprintf(stderr, "\n")
 #endif
 
 // Declaration of create_lum_group, assuming it's defined in lums.h or a related file

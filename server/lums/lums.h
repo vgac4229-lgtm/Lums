@@ -6,6 +6,29 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
+#include <stdbool.h>
+
+// Forward declarations for missing types
+typedef struct {
+    int x, y, z;
+} SpatialCoordinates;
+
+typedef enum {
+    ZONE_ACTIVE,
+    ZONE_INACTIVE,
+    ZONE_SUSPENDED
+} ZoneState;
+
+typedef enum {
+    VORAX_READY,
+    VORAX_PROCESSING,
+    VORAX_ERROR
+} VoraxState;
+
+typedef struct {
+    double field_strength;
+    double coherence;
+} QuantumField;
 
 // LUMS Structure Types
 typedef enum {

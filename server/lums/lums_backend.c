@@ -2,7 +2,18 @@
 #include "lums.h"
 #include "electromechanical.h"
 
+// Fix compilation errors
+#define _POSIX_C_SOURCE 199309L
+
 // Forward declarations
+typedef struct ElectromechanicalState ElectromechanicalState;
+typedef struct MemoryBlock {
+    uint64_t data;
+    uint64_t timestamp;
+    bool used;
+    uint64_t checksum;
+} MemoryBlock;
+
 typedef struct LUMSBackendReal {
     uint64_t total_lums_created;
     uint64_t total_operations;

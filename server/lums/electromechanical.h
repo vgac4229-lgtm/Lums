@@ -83,6 +83,15 @@ int verify_conservation(uint64_t before, uint64_t after);
 
 void cleanup_electromechanical_system(ElectromechanicalEngine* engine);
 
+// Forward declaration
+typedef struct {
+    ElectromechanicalEngine* engine;
+    uint64_t operation_count;
+    double energy_consumed;
+    double total_time_ms;
+    int simulation_active;
+} ElectromechanicalState;
+
 // ElectromechanicalState management
 ElectromechanicalState* create_electromechanical_state(void);
 void destroy_electromechanical_state(ElectromechanicalState* state);

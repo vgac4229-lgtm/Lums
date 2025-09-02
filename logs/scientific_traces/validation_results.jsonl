@@ -1,0 +1,2 @@
+{"operation":"newton_raphson_sqrt","input":64.000000000000000,"result":8.000000000000000,"duration_ns":270,"timestamp":1756816191}
+{"operation":"stress_test","input":1000.000000000000000,"result":1000.000000000000000,"duration_ns":248943,"timestamp":1756816191}
