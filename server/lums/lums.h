@@ -52,14 +52,29 @@ typedef enum {
 } GroupType;
 
 // Core LUM structure
+// Forward declaration for spatial data
+typedef struct SpatialData SpatialData;
+
 typedef struct {
     uint8_t presence;              // 0 or 1
     LumStructureType structure_type;
-    void* spatial_data;            // Optional spatial information
+    SpatialData* spatial_data;     // Type-safe spatial information
     struct {
         int x, y;                  // Position in space
     } position;
 } LUM;
+
+// Type-safe spatial data structure
+typedef struct SpatialData {
+    enum { SPATIAL_NONE, SPATIAL_METADATA, SPATIAL_FLOW } type;
+    union {
+        char* metadata;
+        struct {
+            char* target_zone;
+            double flow_rate;
+        } flow_data;
+    } data;
+} SpatialData;
 
 // LUM Group structure
 typedef struct LUMGroup {
