@@ -1,11 +1,17 @@
-
 #ifndef LUMS_BACKEND_H
 #define LUMS_BACKEND_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
+#include <math.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <pthread.h>
 
 // ===== ENUMS ET CONSTANTES =====
 typedef enum {
