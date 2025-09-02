@@ -25,6 +25,12 @@ typedef enum {
     VORAX_ERROR
 } VoraxState;
 
+typedef enum {
+    QUANTUM_IDLE,
+    QUANTUM_ACTIVE,
+    QUANTUM_COLLAPSED
+} QuantumState;
+
 typedef struct {
     double field_strength;
     double coherence;
@@ -106,11 +112,48 @@ typedef struct {
 #define MAX_MEMORY_SLOTS 32
 
 // VORAX Engine state
+// Vorax engine structure
+#define MAX_ZONES 128
+#define MAX_MEMORY 128
+#define ERROR_MSG_SIZE 256
+
 typedef struct {
-    VoraxZone* zones[MAX_ZONES];
-    uint32_t active_zones;
-    VoraxState state;
-    QuantumField quantum_field;
+    char* name;
+    struct {
+        int x, y, width, height;
+    } bounds;
+    LUMGroup* group;
+    LUM* lums;
+    size_t count;
+} VoraxZone;
+
+typedef struct {
+    char* name;
+    void* data;
+    size_t size;
+    bool allocated;
+} VoraxMemory;
+
+typedef struct {
+    VoraxZone* zones[MAX_ZONES];     // Array of pointers to zones
+    size_t zone_count;
+
+    VoraxMemory* memory_slots;       // Dynamic memory array
+    size_t memory_count;
+
+    char* last_error;
+    char error_message[ERROR_MSG_SIZE];
+    char* zone_names[MAX_ZONES];
+
+    size_t current_tick;
+    double energy_budget;
+
+    // Legacy compatibility
+    LUMGroup* groups;
+    size_t group_count;
+    QuantumState quantum_state;
+    double total_energy;
+    char status[64];
 } VoraxEngine;
 
 // Core encoding/decoding functions
