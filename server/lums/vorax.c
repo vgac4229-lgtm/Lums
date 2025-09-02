@@ -19,9 +19,37 @@ VoraxEngine* create_vorax_engine(void) {
         return NULL;
     }
 
-    engine->zones = NULL;
+    engine->zones = (VoraxZone*)malloc(sizeof(VoraxZone) * MAX_ZONES);
+    if (!engine->zones) {
+        free(engine);
+        return NULL;
+    }
+    
+    // Initialize all zones to empty
+    for (size_t i = 0; i < MAX_ZONES; i++) {
+        engine->zones[i].name = NULL;
+        engine->zones[i].group = NULL;
+        engine->zones[i].lums = NULL;
+        engine->zones[i].count = 0;
+    }
+    
     engine->zone_count = 0;
-    engine->memory_slots = NULL;
+    engine->memory_slots = (VoraxMemory*)malloc(sizeof(VoraxMemory) * MAX_MEMORY_SLOTS);
+    if (!engine->memory_slots) {
+        free(engine->zones);
+        free(engine);
+        return NULL;
+    }
+    
+    // Initialize all memory slots to empty
+    for (size_t i = 0; i < MAX_MEMORY_SLOTS; i++) {
+        engine->memory_slots[i].name = NULL;
+        engine->memory_slots[i].stored_group = NULL;
+        engine->memory_slots[i].data = NULL;
+        engine->memory_slots[i].size = 0;
+        engine->memory_slots[i].allocated = false;
+    }
+    
     engine->memory_count = 0;
     engine->last_error = NULL; // Initialize last_error to NULL
 
@@ -44,7 +72,12 @@ void free_vorax_engine(VoraxEngine* engine) {
         if (engine->zones[i].name) {
             free(engine->zones[i].name);
         }
-        free_lum_group(engine->zones[i].group);
+        if (engine->zones[i].group) {
+            free_lum_group(engine->zones[i].group);
+        }
+        if (engine->zones[i].lums) {
+            free(engine->zones[i].lums);
+        }
     }
     if (engine->zones) {
         free(engine->zones);
@@ -86,15 +119,12 @@ int vorax_add_zone(VoraxEngine* engine, const char* name, int x, int y, int widt
         }
     }
 
-    // Resize zones array
-    VoraxZone* new_zones = (VoraxZone*)realloc(engine->zones,
-                                               sizeof(VoraxZone) * (engine->zone_count + 1));
-    if (!new_zones) {
-        vorax_set_error(engine, "Memory allocation failed for zones.");
-        return -3; // Memory allocation failed
+    // Check if we have space for a new zone
+    if (engine->zone_count >= MAX_ZONES) {
+        vorax_set_error(engine, "Maximum number of zones reached.");
+        return -3; // Too many zones
     }
 
-    engine->zones = new_zones;
     VoraxZone* zone = &engine->zones[engine->zone_count];
 
     // Initialize zone
@@ -609,47 +639,21 @@ void print_lum_group(LUMGroup* group) {
 // --- VORAX VM Implementation ---
 
 VoraxEngine* vorax_create_engine(void) {
-    VoraxEngine* engine = malloc(sizeof(VoraxEngine));
-    if (!engine) return NULL;
-
-    // Initialize zones dynamically
-    for (int i = 0; i < MAX_ZONES; i++) {
-        engine->zones[i] = NULL;
-        engine->zone_names[i] = NULL;
-    }
-
-    engine->zone_count = 0;
-    engine->current_tick = 0;
-    engine->energy_budget = 1000.0;
-    memset(engine->error_message, 0, sizeof(engine->error_message));
-
-    return engine;
+    // Use the main create function to avoid duplication
+    return create_vorax_engine();
 }
 
 void vorax_destroy_engine(VoraxEngine* engine) {
-    if (!engine) return;
-
-    for (int i = 0; i < MAX_ZONES; i++) {
-        if (engine->zones[i]) {
-            if (engine->zones[i]->lums) {
-                free(engine->zones[i]->lums);
-            }
-            free(engine->zones[i]);
-        }
-        if (engine->zone_names[i]) {
-            free(engine->zone_names[i]);
-        }
-    }
-
-    free(engine);
+    // Use the main free function to avoid duplication
+    free_vorax_engine(engine);
 }
 
 int vorax_fuse_zones(VoraxEngine* engine, int zone1, int zone2) {
-    if (!engine || zone1 >= MAX_ZONES || zone2 >= MAX_ZONES) return -1;
-    if (!engine->zones[zone1] || !engine->zones[zone2]) return -1;
+    if (!engine || zone1 >= (int)engine->zone_count || zone2 >= (int)engine->zone_count) return -1;
+    if (!engine->zones[zone1].group || !engine->zones[zone2].group) return -1;
 
-    LUMGroup* g1 = engine->zones[zone1];
-    LUMGroup* g2 = engine->zones[zone2];
+    LUMGroup* g1 = engine->zones[zone1].group;
+    LUMGroup* g2 = engine->zones[zone2].group;
 
     // Create fused group
     size_t total_count = g1->count + g2->count;
@@ -659,15 +663,20 @@ int vorax_fuse_zones(VoraxEngine* engine, int zone1, int zone2) {
     memcpy(fused_lums, g1->lums, sizeof(LUM) * g1->count);
     memcpy(fused_lums + g1->count, g2->lums, sizeof(LUM) * g2->count);
 
+    // Create new fused group
+    LUMGroup* fused_group = create_lum_group(fused_lums, total_count, GROUP_LINEAR);
+    if (!fused_group) {
+        free(fused_lums);
+        return -4;
+    }
+
     // Update zone1 with fused result
-    free(g1->lums);
-    g1->lums = fused_lums;
-    g1->count = total_count;
+    free_lum_group(engine->zones[zone1].group);
+    engine->zones[zone1].group = fused_group;
 
     // Clear zone2
-    free(g2->lums);
-    g2->lums = NULL;
-    g2->count = 0;
+    free_lum_group(engine->zones[zone2].group);
+    engine->zones[zone2].group = NULL;
 
     engine->current_tick++;
     return 0;

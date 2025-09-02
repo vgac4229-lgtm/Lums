@@ -93,9 +93,20 @@ typedef struct LUMGroup {
     void* spatial_data;            // Additional spatial metadata
 } LUMGroup;
 
+// VORAX definitions
+#define MAX_ZONES 128
+#define MAX_MEMORY_SLOTS 128
+#define ERROR_MSG_SIZE 256
+
 // VORAX Zone structure
-typedef struct VoraxZone {
+typedef struct {
+    char* name;
+    struct {
+        int x, y, width, height;
+    } bounds;
     LUMGroup* group;
+    LUM* lums;
+    size_t count;
     uint32_t zone_id;
     SpatialCoordinates position;
     ZoneState state;
@@ -106,36 +117,14 @@ typedef struct {
     char* name;
     LUMGroup* stored_group;
     time_t timestamp;
-} VoraxMemory;
-
-#define MAX_ZONES 16
-#define MAX_MEMORY_SLOTS 32
-
-// VORAX Engine state
-// Vorax engine structure
-#define MAX_ZONES 128
-#define MAX_MEMORY 128
-#define ERROR_MSG_SIZE 256
-
-typedef struct {
-    char* name;
-    struct {
-        int x, y, width, height;
-    } bounds;
-    LUMGroup* group;
-    LUM* lums;
-    size_t count;
-} VoraxZone;
-
-typedef struct {
-    char* name;
     void* data;
     size_t size;
     bool allocated;
 } VoraxMemory;
 
+// VORAX Engine state
 typedef struct {
-    VoraxZone* zones[MAX_ZONES];     // Array of pointers to zones
+    VoraxZone* zones;                // Dynamic array of zones
     size_t zone_count;
 
     VoraxMemory* memory_slots;       // Dynamic memory array
