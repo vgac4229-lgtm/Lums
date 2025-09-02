@@ -49,35 +49,38 @@ $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
 	mkdir -p $(BUILDDIR)/$(SRCDIR)
 	mkdir -p $(BUILDDIR)/$(TESTDIR)
+	mkdir -p build/server/lums
+	mkdir -p build/tests
 	mkdir -p logs/scientific_traces
 	mkdir -p logs/performance
 	mkdir -p logs/validation
 	mkdir -p logs/memory
+	mkdir -p logs/inspection_critique
 
 # Compilation objets pour la librairie LUMS
-build/server/lums/decoder.o: server/lums/decoder.c
+build/server/lums/decoder.o: server/lums/decoder.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/encoder.o: server/lums/encoder.c
+build/server/lums/encoder.o: server/lums/encoder.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/operations.o: server/lums/operations.c
+build/server/lums/operations.o: server/lums/operations.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/vorax.o: server/lums/vorax.c
+build/server/lums/vorax.o: server/lums/vorax.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/lums_backend.o: server/lums/lums_backend.c
+build/server/lums/lums_backend.o: server/lums/lums_backend.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/electromechanical.o: server/lums/electromechanical.c
+build/server/lums/electromechanical.o: server/lums/electromechanical.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/electromechanical_impl.o: server/lums/electromechanical_impl.c
+build/server/lums/electromechanical_impl.o: server/lums/electromechanical_impl.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/advanced-math.o: server/lums/advanced-math.c
+build/server/lums/advanced-math.o: server/lums/advanced-math.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/lumgroup.o: server/lums/lumgroup.c
+build/server/lums/lumgroup.o: server/lums/lumgroup.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/jit_compiler.o: server/lums/jit_compiler.c
+build/server/lums/jit_compiler.o: server/lums/jit_compiler.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/vorax_simple.o: server/lums/vorax_simple.c
+build/server/lums/vorax_simple.o: server/lums/vorax_simple.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/scientific_logger.o: server/lums/scientific_logger.c
+build/server/lums/scientific_logger.o: server/lums/scientific_logger.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compilation objets pour les tests
