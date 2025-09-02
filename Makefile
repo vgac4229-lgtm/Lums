@@ -271,3 +271,17 @@ help:
 	@echo "  clean            - Nettoyage build"
 	@echo "  clean-all        - Nettoyage complet"
 	@echo "  ci               - Pipeline CI/CD complet"
+	@echo "  generate_forensic_logs - Génère les logs forensiques corrigés"
+
+display_logs:
+	@echo "=== AFFICHAGE RÉSULTATS LOGS ==="
+	@if [ -f logs/scientific_traces/lums_operations.jsonl ]; then \
+		tail -2 logs/scientific_traces/lums_operations.jsonl; \
+	else \
+		echo "Aucun log disponible"; \
+	fi
+
+generate_forensic_logs:
+	@echo "=== GÉNÉRATION LOGS FORENSIQUES CORRIGÉS ==="
+	@chmod +x scripts/generate_forensic_logs.sh
+	@./scripts/generate_forensic_logs.sh
