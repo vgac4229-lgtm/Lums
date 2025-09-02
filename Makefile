@@ -1,4 +1,3 @@
-
 # Makefile pour LUMS/VORAX Backend Complet
 # Version: 2025.001 - Production Ready
 
@@ -13,6 +12,12 @@ TESTDIR = tests
 SOURCES = $(wildcard $(SRCDIR)/*.c) $(wildcard $(TESTDIR)/*.c)
 OBJECTS = $(SOURCES:%.c=$(BUILDDIR)/%.o)
 LIBRARY = $(BUILDDIR)/liblums.a
+
+# Déclaration des objets LUMS pour la librairie
+LUMS_OBJECTS = build/server/lums/decoder.o build/server/lums/encoder.o build/server/lums/operations.o \
+               build/server/lums/vorax.o build/server/lums/lums_backend.o build/server/lums/electromechanical.o \
+               build/server/lums/electromechanical_impl.o build/server/lums/advanced-math.o build/server/lums/lumgroup.o \
+               build/server/lums/jit_compiler.o build/server/lums/vorax_simple.o build/server/lums/scientific_logger.o
 
 # Configuration debug
 DEBUG_FLAGS = -g3 -DDEBUG -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
@@ -49,12 +54,38 @@ $(BUILDDIR):
 	mkdir -p logs/validation
 	mkdir -p logs/memory
 
-# Compilation objets
+# Compilation objets pour la librairie LUMS
+build/server/lums/decoder.o: server/lums/decoder.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/encoder.o: server/lums/encoder.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/operations.o: server/lums/operations.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/vorax.o: server/lums/vorax.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/lums_backend.o: server/lums/lums_backend.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/electromechanical.o: server/lums/electromechanical.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/electromechanical_impl.o: server/lums/electromechanical_impl.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/advanced-math.o: server/lums/advanced-math.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/lumgroup.o: server/lums/lumgroup.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/jit_compiler.o: server/lums/jit_compiler.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/vorax_simple.o: server/lums/vorax_simple.c
+	$(CC) $(CFLAGS) -c $< -o $@
+build/server/lums/scientific_logger.o: server/lums/scientific_logger.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compilation objets pour les tests
 $(BUILDDIR)/%.o: %.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Création librairie
-$(LIBRARY): $(BUILDDIR)/$(SRCDIR)/decoder.o $(BUILDDIR)/$(SRCDIR)/encoder.o $(BUILDDIR)/$(SRCDIR)/operations.o $(BUILDDIR)/$(SRCDIR)/vorax.o $(BUILDDIR)/$(SRCDIR)/lums_backend.o $(BUILDDIR)/$(SRCDIR)/electromechanical.o $(BUILDDIR)/$(SRCDIR)/electromechanical_impl.o
+$(LIBRARY): $(LUMS_OBJECTS)
 	ar rcs $@ $^
 
 # Exécutable test principal
@@ -82,6 +113,14 @@ test: $(BUILDDIR)/lums_test
 	@echo "=== TESTS BACKEND LUMS COMPLET ==="
 	./$(BUILDDIR)/lums_test
 
+test-scientific: build/tests/scientific_validation_complete
+	@echo "=== TESTS SCIENTIFIQUES COMPLETS ==="
+	./build/tests/scientific_validation_complete
+
+build/tests/scientific_validation_complete: tests/scientific_validation_complete.c $(LUMS_OBJECTS)
+	@mkdir -p build/tests
+	$(CC) $(CFLAGS) -o $@ $^ -lm -lpthread
+
 # Test Node.js
 test-js:
 	npm test
@@ -107,9 +146,14 @@ test-stress: $(BUILDDIR)/stress_test_1m_lums
 	./$(BUILDDIR)/stress_test_1m_lums 2>&1 | tee logs/performance/stress_1m_$(shell date +%Y%m%d_%H%M%S).log
 
 # Tests forensiques
-test-forensic: $(BUILDDIR)/scientific_validation
-	@echo "=== VALIDATION SCIENTIFIQUE FORENSIQUE ==="
-	./$(BUILDDIR)/scientific_validation 2>&1 | tee logs/validation/forensic_$(shell date +%Y%m%d_%H%M%S).log
+test-forensic: $(BUILDDIR)/tests/scientific_validation_forensic
+	@echo "=== VALIDATION FORENSIQUE COMPLÈTE ==="
+	./build/tests/scientific_validation_forensic
+	@echo "✅ Validation forensique terminée"
+
+build/tests/scientific_validation_forensic: tests/scientific_validation_forensic.c $(LUMS_OBJECTS)
+	@mkdir -p build/tests
+	$(CC) $(CFLAGS) -D_POSIX_C_SOURCE=199309L -o $@ $^ -lm -lpthread
 
 # Développement backend complet
 dev-backend: debug $(BUILDDIR)/electromechanical_console
@@ -215,10 +259,11 @@ help:
 	@echo "  debug            - Compilation debug avec sanitizers"
 	@echo "  release          - Compilation optimisée"
 	@echo "  test             - Tests rapides"
+	@echo "  test-scientific  - Tests scientifiques"
+	@echo "  test-forensic    - Validation scientifique forensique"
 	@echo "  test-security    - Tests sécurité (Valgrind)"
 	@echo "  test-performance - Tests performance (1M LUMs)"
 	@echo "  test-stress      - Tests stress"
-	@echo "  test-forensic    - Validation scientifique"
 	@echo "  dev-backend      - Mode développement backend"
 	@echo "  full-stack       - Stack complète (HTTP + UI)"
 	@echo "  perf-test        - Tests performance HTTP"

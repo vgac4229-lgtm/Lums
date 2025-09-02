@@ -1,10 +1,14 @@
+#define _POSIX_C_SOURCE 199309L
 #include "lums.h"
+#include "encoder.h"
+#include "decoder.h"
+#include "operations.h"
 #include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include <math.h>
 #include <stdlib.h>
-#include <unistd.h> // For getpid
+#include <unistd.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
 
 /**
  * Create a new VORAX engine
@@ -508,21 +512,21 @@ LUMGroup* create_lum_group(LUM* lums, size_t count, GroupType type) {
     if (group->id) {
         // Generate cryptographically secure UUID v4
         uint8_t uuid_bytes[16];
-        
+
         // Use time-based seed with process ID for uniqueness
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
         unsigned int seed = (unsigned int)(ts.tv_sec ^ ts.tv_nsec ^ getpid());
         srand(seed);
-        
+
         for (int i = 0; i < 16; i++) {
             uuid_bytes[i] = (uint8_t)(rand() % 256);
         }
-        
+
         // Set version (4) and variant bits according to RFC 4122
         uuid_bytes[6] = (uuid_bytes[6] & 0x0F) | 0x40; // Version 4
         uuid_bytes[8] = (uuid_bytes[8] & 0x3F) | 0x80; // Variant 10
-        
+
         snprintf(group->id, 37, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
                 uuid_bytes[0], uuid_bytes[1], uuid_bytes[2], uuid_bytes[3],
                 uuid_bytes[4], uuid_bytes[5], uuid_bytes[6], uuid_bytes[7],

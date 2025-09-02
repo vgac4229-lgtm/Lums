@@ -50,12 +50,11 @@ typedef struct LUMGroup {
 } LUMGroup;
 
 // VORAX Zone structure
-typedef struct {
-    char* name;
+typedef struct VoraxZone {
     LUMGroup* group;
-    struct {
-        int x, y, width, height;
-    } bounds;
+    uint32_t zone_id;
+    SpatialCoordinates position;
+    ZoneState state;
 } VoraxZone;
 
 // VORAX Memory structure
@@ -70,15 +69,10 @@ typedef struct {
 
 // VORAX Engine state
 typedef struct {
-    VoraxZone* zones;
-    size_t zone_count;
-    VoraxMemory* memory_slots;
-    size_t memory_count;
-    char* last_error;
-    char error_message[256];
-    char* zone_names[MAX_ZONES];
-    uint64_t current_tick;
-    double energy_budget;
+    VoraxZone* zones[MAX_ZONES];
+    uint32_t active_zones;
+    VoraxState state;
+    QuantumField quantum_field;
 } VoraxEngine;
 
 // Core encoding/decoding functions

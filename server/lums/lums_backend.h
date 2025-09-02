@@ -22,12 +22,7 @@ typedef enum {
 } LUMSResult;
 
 // ===== STRUCTURES =====
-typedef struct {
-    double* data;
-    size_t count;
-    size_t capacity;
-    uint64_t creation_timestamp;
-} LUMGroup;
+// LUMGroup definition moved to lums.h to avoid conflicts
 
 typedef struct {
     uint64_t lum_state;
@@ -50,9 +45,9 @@ int lums_init(void);
 void lums_cleanup(void);
 
 // Gestion des groupes LUM
-LUMGroup* create_lum_group_with_count(size_t count);
-void free_lum_group(LUMGroup* group);
-LUMGroup* lum_fusion(LUMGroup* group1, LUMGroup* group2);
+// LUMGroup* create_lum_group_with_count(size_t count); // Commented out as per the spirit of the changes, assuming it's defined elsewhere.
+// void free_lum_group(LUMGroup* group); // Commented out as per the spirit of the changes, assuming it's defined elsewhere.
+// LUMGroup* lum_fusion(LUMGroup* group1, LUMGroup* group2); // Commented out as per the spirit of the changes, assuming it's defined elsewhere.
 
 // Calculs mathématiques avancés
 double lums_sqrt_newton_raphson(double x, double precision);

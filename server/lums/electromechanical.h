@@ -1,13 +1,20 @@
-
 #ifndef ELECTROMECHANICAL_H
 #define ELECTROMECHANICAL_H
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
+
+typedef enum {
+    OPERATION_FUSION = 0x10,
+    OPERATION_SPLIT = 0x11,
+    OPERATION_CYCLE = 0x12,
+    OPERATION_MEMORY = 0x13
+} OperationType;
 
 // Configuration système électromécanique
 #define MAX_RELAYS              512     // 512 relais total
@@ -73,5 +80,18 @@ uint64_t get_nanosecond_timestamp(void);
 void delay_ms(uint32_t milliseconds);
 uint8_t count_active_relays(uint8_t bank_id);
 int verify_conservation(uint64_t before, uint64_t after);
+
+void cleanup_electromechanical_system(ElectromechanicalEngine* engine);
+
+// ElectromechanicalState management
+ElectromechanicalState* create_electromechanical_state(void);
+void destroy_electromechanical_state(ElectromechanicalState* state);
+void simulate_relay_operation(ElectromechanicalState* state, uint64_t lum_a, uint64_t lum_b, OperationType op_type);
+
+// Scientific logging
+int init_scientific_logging(void);
+void log_scientific_operation_detailed(const char* operation, double input, double result, long duration_ns);
+void close_scientific_logging(void);
+int validate_scientific_logs(const char* log_file_path);
 
 #endif
