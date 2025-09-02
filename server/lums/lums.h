@@ -36,7 +36,10 @@ typedef enum {
     LUM_GROUP = 1,
     LUM_NODE = 2,
     LUM_CYCLE = 3,
-    LUM_CLUSTER = 4
+    LUM_CLUSTER = 4,
+    LUM_FRACTAL = 5,
+    LUM_INVERTED = 6,
+    LUM_EXPANDED = 7
 } LumStructureType;
 
 // Group Types
@@ -48,7 +51,8 @@ typedef enum {
     GROUP_FRACTAL = 4,
     GROUP_INVERTED = 5,
     GROUP_INFINITE = 6,
-    GROUP_HARMONIC = 7
+    GROUP_HARMONIC = 7,
+    GROUP_EXPANDED = 8
 } GroupType;
 
 // Type-safe spatial data structure

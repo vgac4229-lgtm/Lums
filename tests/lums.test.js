@@ -9,7 +9,7 @@ describe('LUMS System Complete Tests', () => {
 
   describe('Basic LUMS Operations', () => {
     test('Bit to LUM conversion preserves information', () => {
-      const result = execSync('echo "11010" | node -e "console.log(require(\'./server/lums-engine\').convertBitsToLums(\'11010\'))"');
+      const result = execSync('echo "11010" | node -e "console.log(require(\'./server/lums-engine.cjs\').convertBitsToLums(\'11010\'))"');
       expect(result.toString()).toContain('presence');
     });
 
@@ -41,12 +41,18 @@ describe('LUMS System Complete Tests', () => {
     test('Division by zero resolution via fractalisation', () => {
       // Test the resolve_division_by_zero function
       const testCode = `
-        #include "server/lums/lums.h"
-        int main() {
-          // Create test numerator
-          LUM test_lums[4] = {{1, LUM_LINEAR, {0, 0}}, {0, LUM_LINEAR, {1, 0}}, 
-                              {1, LUM_LINEAR, {2, 0}}, {1, LUM_LINEAR, {3, 0}}};
-          LUMGroup* numerator = create_lum_group(test_lums, 4, GROUP_LINEAR);
+#include <stdio.h>
+#include <stdlib.h>
+#include "server/lums/lums.h"
+
+int main() {
+  // Create test numerator with proper initialization
+  LUM test_lums[4];
+  test_lums[0] = (LUM){1, LUM_LINEAR, NULL, {0, 0}};
+  test_lums[1] = (LUM){0, LUM_LINEAR, NULL, {1, 0}};
+  test_lums[2] = (LUM){1, LUM_LINEAR, NULL, {2, 0}};
+  test_lums[3] = (LUM){1, LUM_LINEAR, NULL, {3, 0}};
+  LUMGroup* numerator = create_lum_group(test_lums, 4, GROUP_LINEAR);
 
           LUMGroup* result = resolve_division_by_zero(numerator);
 
@@ -64,7 +70,7 @@ describe('LUMS System Complete Tests', () => {
       `;
 
       fs.writeFileSync('test_division_zero.c', testCode);
-      execSync('gcc -o test_division_zero test_division_zero.c build/liblums.a -lm');
+      execSync('gcc -o test_division_zero test_division_zero.c build/liblums.a build/server/lums/test_functions.o -lm');
       const result = execSync('./test_division_zero').toString();
 
       expect(result).toContain('Division by zero resolved');
@@ -77,9 +83,12 @@ describe('LUMS System Complete Tests', () => {
 
     test('Square root of negative numbers via presence inversion', () => {
       const testCode = `
-        #include "server/lums/lums.h"
-        int main() {
-          LUMGroup* result = sqrt_negative_via_lums(-16);
+#include <stdio.h>
+#include <stdlib.h>
+#include "server/lums/lums.h"
+
+int main() {
+  LUMGroup* result = sqrt_negative_via_lums(-16);
 
           printf("sqrt(-16) via LUMS: %zu inverted LUMs\\n", result->count);
           printf("Inversion pattern: ");
@@ -94,7 +103,7 @@ describe('LUMS System Complete Tests', () => {
       `;
 
       fs.writeFileSync('test_sqrt_negative.c', testCode);
-      execSync('gcc -o test_sqrt_negative test_sqrt_negative.c build/liblums.a -lm');
+      execSync('gcc -o test_sqrt_negative test_sqrt_negative.c build/liblums.a build/server/lums/test_functions.o -lm');
       const result = execSync('./test_sqrt_negative').toString();
 
       expect(result).toContain('sqrt(-16) via LUMS');
@@ -107,9 +116,12 @@ describe('LUMS System Complete Tests', () => {
 
     test('Graham number representation via memory expansion', () => {
       const testCode = `
-        #include "server/lums/lums.h"
-        int main() {
-          LUMGroup* result = represent_graham_number(10); // Precision level 10
+#include <stdio.h>
+#include <stdlib.h>
+#include "server/lums/lums.h"
+
+int main() {
+  LUMGroup* result = represent_graham_number(10); // Precision level 10
 
           printf("Graham number (level 10): %zu expanded LUMs\\n", result->count);
           printf("Knuth pattern: ");
@@ -124,7 +136,7 @@ describe('LUMS System Complete Tests', () => {
       `;
 
       fs.writeFileSync('test_graham.c', testCode);
-      execSync('gcc -o test_graham test_graham.c build/liblums.a -lm');
+      execSync('gcc -o test_graham test_graham.c build/liblums.a build/server/lums/test_functions.o -lm');
       const result = execSync('./test_graham').toString();
 
       expect(result).toContain('Graham number');
@@ -137,10 +149,13 @@ describe('LUMS System Complete Tests', () => {
 
     test('Riemann hypothesis testing via harmonic resonance', () => {
       const testCode = `
-        #include "server/lums/lums.h"
-        int main() {
-          // Test critical line s = 0.5 + it
-          int result = test_riemann_hypothesis_lums(0.5, 14.134725); // First non-trivial zero
+#include <stdio.h>
+#include <stdlib.h>
+#include "server/lums/lums.h"
+
+int main() {
+  // Test critical line s = 0.5 + it
+  int result = test_riemann_hypothesis_lums(0.5, 14.134725); // First non-trivial zero
 
           printf("Riemann hypothesis test (s=0.5+14.134725i): %s\\n", 
                  result ? "RESONANCE DETECTED" : "NO RESONANCE");
@@ -150,7 +165,7 @@ describe('LUMS System Complete Tests', () => {
       `;
 
       fs.writeFileSync('test_riemann.c', testCode);
-      execSync('gcc -o test_riemann test_riemann.c build/liblums.a -lm');
+      execSync('gcc -o test_riemann test_riemann.c build/liblums.a build/server/lums/test_functions.o -lm');
       const result = execSync('./test_riemann').toString();
 
       expect(result).toContain('Riemann hypothesis test');
