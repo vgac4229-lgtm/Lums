@@ -17,7 +17,8 @@ LIBRARY = $(BUILDDIR)/liblums.a
 LUMS_OBJECTS = build/server/lums/decoder.o build/server/lums/encoder.o build/server/lums/operations.o \
                build/server/lums/vorax.o build/server/lums/lums_backend.o build/server/lums/electromechanical.o \
                build/server/lums/electromechanical_impl.o build/server/lums/advanced-math.o build/server/lums/lumgroup.o \
-               build/server/lums/jit_compiler.o build/server/lums/vorax_simple.o build/server/lums/scientific_logger.o
+               build/server/lums/jit_compiler.o build/server/lums/vorax_simple.o build/server/lums/scientific_logger.o \
+               build/server/lums/real_hardware.o
 
 # Configuration debug
 DEBUG_FLAGS = -g3 -DDEBUG -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
