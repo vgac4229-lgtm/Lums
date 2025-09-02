@@ -1,0 +1,369 @@
+~/workspace$ echo "=== COMPILATION ET VALIDATION TESTS SCIENTIFIQUES ==="
+=== COMPILATION ET VALIDATION TESTS SCIENTIFIQUES ===
+~/workspace$ make clean
+rm -rf build
+rm -f *.o *.a
+rm -f logs/performance/*.log
+rm -f logs/validation/*.log
+~/workspace$ make all
+mkdir -p build
+mkdir -p build/server/lums
+mkdir -p build/tests
+mkdir -p logs/scientific_traces
+mkdir -p logs/performance
+mkdir -p logs/validation
+mkdir -p logs/memory
+gcc -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare -c server/lums/decoder.c -o build/server/lums/decoder.o
+gcc -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare -c server/lums/encoder.c -o build/server/lums/encoder.o
+gcc -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare -c server/lums/operations.c -o build/server/lums/operations.o
+server/lums/operations.c: In function ‘create_lum_group’:
+server/lums/operations.c:19:58: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+   19 |         LOG_ERROR("Memory allocation failed for LUMGroup");
+      |                                                          ^
+server/lums/operations.c: In function ‘lum_fusion’:
+server/lums/operations.c:55:56: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+   55 |         LOG_ERROR("Invalid input groups for lum_fusion");
+      |                                                        ^
+server/lums/operations.c:62:66: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+   62 |         LOG_ERROR("Memory allocation failed for fused LUMs array");
+      |                                                                  ^
+server/lums/operations.c:82:53: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+   82 |         LOG_ERROR("Failed to create fused LUM group");
+      |                                                     ^
+server/lums/operations.c: In function ‘lum_split’:
+server/lums/operations.c:99:48: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+   99 |         LOG_ERROR("Invalid input for lum_split");
+      |                                                ^
+server/lums/operations.c:106:68: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  106 |         LOG_ERROR("Memory allocation failed for split result array");
+      |                                                                    ^
+server/lums/operations.c: In function ‘lum_cycle’:
+server/lums/operations.c:179:48: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  179 |         LOG_ERROR("Invalid input for lum_cycle");
+      |                                                ^
+server/lums/operations.c:192:77: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  192 |             LOG_ERROR("Memory allocation failed for single LUM in lum_cycle");
+      |                                                                             ^
+server/lums/operations.c: In function ‘lum_flow’:
+server/lums/operations.c:228:47: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  228 |         LOG_ERROR("Invalid input for lum_flow");
+      |                                               ^
+server/lums/operations.c:235:67: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  235 |         LOG_ERROR("Memory allocation failed for flowed LUMs array");
+      |                                                                   ^
+server/lums/operations.c:249:66: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  249 |         LOG_ERROR("Failed to create LUM group for flow operation");
+      |                                                                  ^
+server/lums/operations.c:263:74: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  263 |         LOG_ERROR("Memory allocation failed for spatial_data in lum_flow");
+      |                                                                          ^
+server/lums/operations.c: In function ‘lum_organic_fusion’:
+server/lums/operations.c:279:57: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  279 |         LOG_ERROR("Invalid input for lum_organic_fusion");
+      |                                                         ^
+server/lums/operations.c:291:83: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  291 |         LOG_ERROR("No LUMs found in any of the provided groups for organic fusion");
+      |                                                                                   ^
+server/lums/operations.c:297:78: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  297 |         LOG_ERROR("Memory allocation failed for fused LUMs in organic fusion");
+      |                                                                              ^
+server/lums/operations.c:334:71: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  334 |         LOG_ERROR("Failed to create fused LUM group in organic fusion");
+      |                                                                       ^
+server/lums/operations.c: In function ‘lum_contextual_split’:
+server/lums/operations.c:347:59: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  347 |         LOG_ERROR("Invalid input for lum_contextual_split");
+      |                                                           ^
+server/lums/operations.c:373:82: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  373 |         LOG_ERROR("No LUMs with known structure types found for contextual split");
+      |                                                                                  ^
+server/lums/operations.c:380:82: warning: ISO C99 requires at least one argument for the "..." in a variadic macro
+  380 |         LOG_ERROR("Memory allocation failed for result array in contextual split");
+      |                                                                                  ^
+gcc -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare -c server/lums/vorax.c -o build/server/lums/vorax.o
+server/lums/vorax.c: In function ‘create_lum_group’:
+server/lums/vorax.c:513:25: error: storage size of ‘ts’ isn’t known
+  513 |         struct timespec ts;
+      |                         ^~
+server/lums/vorax.c:514:9: error: implicit declaration of function ‘clock_gettime’ [-Wimplicit-function-declaration]
+  514 |         clock_gettime(CLOCK_MONOTONIC, &ts);
+      |         ^~~~~~~~~~~~~
+server/lums/vorax.c:514:23: error: ‘CLOCK_MONOTONIC’ undeclared (first use in this function)
+  514 |         clock_gettime(CLOCK_MONOTONIC, &ts);
+      |                       ^~~~~~~~~~~~~~~
+server/lums/vorax.c:514:23: note: each undeclared identifier is reported only once for each function it appears in
+server/lums/vorax.c:513:25: warning: unused variable ‘ts’ [-Wunused-variable]
+  513 |         struct timespec ts;
+      |                         ^~
+In file included from /nix/store/41pf3md9zgpda9kwh6rzn5kaddf7i0lp-glibc-2.40-66-dev/include/unistd.h:226,
+                 from server/lums/vorax.c:7:
+server/lums/vorax.c: In function ‘vorax_create_engine’:
+server/lums/vorax.c:598:28: error: incompatible types when assigning to type ‘VoraxZone’ from type ‘void *’
+  598 |         engine->zones[i] = NULL;
+      |                            ^~~~
+server/lums/vorax.c: In function ‘vorax_destroy_engine’:
+server/lums/vorax.c:614:13: error: used struct type value where scalar is required
+  614 |         if (engine->zones[i]) {
+      |             ^~~~~~
+server/lums/vorax.c:615:33: error: invalid type argument of ‘->’ (have ‘VoraxZone’)
+  615 |             if (engine->zones[i]->lums) {
+      |                                 ^~
+server/lums/vorax.c:616:38: error: invalid type argument of ‘->’ (have ‘VoraxZone’)
+  616 |                 free(engine->zones[i]->lums);
+      |                                      ^~
+server/lums/vorax.c:618:31: error: incompatible type for argument 1 of ‘free’
+  618 |             free(engine->zones[i]);
+      |                  ~~~~~~~~~~~~~^~~
+      |                               |
+      |                               VoraxZone
+In file included from server/lums/lums.h:5,
+                 from server/lums/vorax.c:1:
+/nix/store/41pf3md9zgpda9kwh6rzn5kaddf7i0lp-glibc-2.40-66-dev/include/stdlib.h:687:25: note: expected ‘void *’ but argument is of type ‘VoraxZone’
+  687 | extern void free (void *__ptr) __THROW;
+      |                   ~~~~~~^~~~~
+server/lums/vorax.c: In function ‘vorax_fuse_zones’:
+server/lums/vorax.c:630:9: error: wrong type argument to unary exclamation mark
+  630 |     if (!engine->zones[zone1] || !engine->zones[zone2]) return -1;
+      |         ^
+server/lums/vorax.c:630:34: error: wrong type argument to unary exclamation mark
+  630 |     if (!engine->zones[zone1] || !engine->zones[zone2]) return -1;
+      |                                  ^
+server/lums/vorax.c:632:20: error: incompatible types when initializing type ‘LUMGroup *’ using type ‘VoraxZone’
+  632 |     LUMGroup* g1 = engine->zones[zone1];
+      |                    ^~~~~~
+server/lums/vorax.c:633:20: error: incompatible types when initializing type ‘LUMGroup *’ using type ‘VoraxZone’
+  633 |     LUMGroup* g2 = engine->zones[zone2];
+      |                    ^~~~~~
+server/lums/vorax.c: In function ‘vorax_split_zone’:
+server/lums/vorax.c:659:9: error: wrong type argument to unary exclamation mark
+  659 |     if (!engine->zones[zone]) return -1;
+      |         ^
+server/lums/vorax.c:661:24: error: incompatible types when initializing type ‘LUMGroup *’ using type ‘VoraxZone’
+  661 |     LUMGroup* source = engine->zones[zone];
+      |                        ^~~~~~
+server/lums/vorax.c:673:39: error: incompatible types when assigning to type ‘VoraxZone’ from type ‘void *’
+  673 |         engine->zones[new_zone_idx] = malloc(sizeof(LUMGroup));
+      |                                       ^~~~~~
+server/lums/vorax.c:674:13: error: wrong type argument to unary exclamation mark
+  674 |         if (!engine->zones[new_zone_idx]) return -1;
+      |             ^
+server/lums/vorax.c:676:47: warning: comparison of integer expressions of different signedness: ‘int’ and ‘size_t’ {aka ‘long unsigned int’} [-Wsign-compare]
+  676 |         size_t part_size = lums_per_part + (i < remainder ? 1 : 0);
+      |                                               ^
+server/lums/vorax.c:677:36: error: invalid type argument of ‘->’ (have ‘VoraxZone’)
+  677 |         engine->zones[new_zone_idx]->lums = malloc(sizeof(LUM) * part_size);
+      |                                    ^~
+server/lums/vorax.c:678:36: error: invalid type argument of ‘->’ (have ‘VoraxZone’)
+  678 |         engine->zones[new_zone_idx]->count = part_size;
+      |                                    ^~
+server/lums/vorax.c:682:43: error: invalid type argument of ‘->’ (have ‘VoraxZone’)
+  682 |         memcpy(engine->zones[new_zone_idx]->lums,
+      |                                           ^~
+server/lums/vorax.c: In function ‘vorax_cycle_zone’:
+server/lums/vorax.c:693:9: error: wrong type argument to unary exclamation mark
+  693 |     if (!engine->zones[zone]) return -1;
+      |         ^
+server/lums/vorax.c:695:23: error: incompatible types when initializing type ‘LUMGroup *’ using type ‘VoraxZone’
+  695 |     LUMGroup* group = engine->zones[zone];
+      |                       ^~~~~~
+make: *** [Makefile:54: build/server/lums/vorax.o] Error 1
+~/workspace$ echo ""
+
+~/workspace$ echo "=== EXÉCUTION TESTS SCIENTIFIQUES COMPLETS ==="
+=== EXÉCUTION TESTS SCIENTIFIQUES COMPLETS ===
+~/workspace$ if [ -f "build/tests/scientific_validation_complete" ]; then
+>   ./build/tests/scientific_validation_complete
+> else
+>   echo "❌ Binaire scientific_validation_complete manquant - compilation des tests..."
+>   gcc -o build/tests/scientific_validation_complete tests/scientific_validation_complete.c server/lums/*.c -lm -lpthread
+>   ./build/tests/scientific_validation_complete
+> fi
+❌ Binaire scientific_validation_complete manquant - compilation des tests...
+tests/scientific_validation_complete.c: In function ‘test_backend_comprehensive’:
+tests/scientific_validation_complete.c:27:15: error: implicit declaration of function ‘lums_compute_fusion’; did you mean ‘lums_compute_fusion_real’? [-Wimplicit-function-declaration]
+   27 |     int ret = lums_compute_fusion(0b1010, 0b1100, &result_fusion);
+      |               ^~~~~~~~~~~~~~~~~~~
+      |               lums_compute_fusion_real
+tests/scientific_validation_complete.c:43:11: error: implicit declaration of function ‘lums_compute_split’; did you mean ‘lums_compute_split_real’? [-Wimplicit-function-declaration]
+   43 |     ret = lums_compute_split(0b11110000, &result_a, &result_b);
+      |           ^~~~~~~~~~~~~~~~~~
+      |           lums_compute_split_real
+tests/scientific_validation_complete.c:59:22: error: implicit declaration of function ‘lums_compute_sqrt’; did you mean ‘lums_compute_split_real’? [-Wimplicit-function-declaration]
+   59 |     double sqrt_64 = lums_compute_sqrt(64.0);
+      |                      ^~~~~~~~~~~~~~~~~
+      |                      lums_compute_split_real
+tests/scientific_validation_complete.c:74:24: error: implicit declaration of function ‘lums_test_prime’ [-Wimplicit-function-declaration]
+   74 |     bool is_97_prime = lums_test_prime(97);
+      |                        ^~~~~~~~~~~~~~~
+tests/scientific_validation_complete.c:89:11: error: implicit declaration of function ‘lums_store_memory’ [-Wimplicit-function-declaration]
+   89 |     ret = lums_store_memory("test_conservation", 0b11001010);
+      |           ^~~~~~~~~~~~~~~~~
+tests/scientific_validation_complete.c:96:11: error: implicit declaration of function ‘lums_retrieve_memory’ [-Wimplicit-function-declaration]
+   96 |     ret = lums_retrieve_memory("test_conservation", &retrieved_data);
+      |           ^~~~~~~~~~~~~~~~~~~~
+server/lums/advanced-math.c:12:13: error: redefinition of ‘simd_available’
+   12 | static bool simd_available = false;
+      |             ^~~~~~~~~~~~~~
+In file included from server/lums/advanced-math.c:9:
+server/lums/lums_backend.h:68:13: note: previous definition of ‘simd_available’ with type ‘_Bool’
+   68 | static bool simd_available = false;
+      |             ^~~~~~~~~~~~~~
+server/lums/advanced-math.c:20:13: error: static declaration of ‘log_scientific_operation’ follows non-static declaration
+   20 | static void log_scientific_operation(const char* operation, double input, double result, long duration_ns) {
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~
+server/lums/lums_backend.h:65:6: note: previous declaration of ‘log_scientific_operation’ with type ‘void(const char *, double,  double,  long int)’
+   65 | void log_scientific_operation(const char* operation, double input, double result, long duration_ns);
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~
+server/lums/advanced-math.c: In function ‘lums_fusion_vectorized’:
+server/lums/advanced-math.c:40:21: warning: AVX vector return without AVX enabled changes the ABI [-Wpsabi]
+   40 |             __m256d va = _mm256_load_pd(&lums_a[i]);
+      |                     ^~
+In file included from server/lums/lums_backend.c:3:
+server/lums/lums.h:50:3: error: conflicting types for ‘LUMGroup’; have ‘struct LUMGroup’
+   50 | } LUMGroup;
+      |   ^~~~~~~~
+In file included from server/lums/lums_backend.c:2:
+server/lums/lums_backend.h:30:3: note: previous declaration of ‘LUMGroup’ with type ‘LUMGroup’
+   30 | } LUMGroup;
+      |   ^~~~~~~~
+server/lums/lums.h:92:6: error: conflicting types for ‘free_lum_group’; have ‘void(LUMGroup *)’
+   92 | void free_lum_group(LUMGroup* group);
+      |      ^~~~~~~~~~~~~~
+server/lums/lums_backend.h:54:6: note: previous declaration of ‘free_lum_group’ with type ‘void(LUMGroup *)’
+   54 | void free_lum_group(LUMGroup* group);
+      |      ^~~~~~~~~~~~~~
+server/lums/lums.h:104:11: error: conflicting types for ‘lum_fusion’; have ‘LUMGroup *(LUMGroup *, LUMGroup *)’
+  104 | LUMGroup* lum_fusion(LUMGroup* group1, LUMGroup* group2);
+      |           ^~~~~~~~~~
+server/lums/lums_backend.h:55:11: note: previous declaration of ‘lum_fusion’ with type ‘LUMGroup *(LUMGroup *, LUMGroup *)’
+   55 | LUMGroup* lum_fusion(LUMGroup* group1, LUMGroup* group2);
+      |           ^~~~~~~~~~
+server/lums/lums_backend.c:15:5: error: unknown type name ‘ElectromechanicalState’; did you mean ‘ElectromechanicalEngine’?
+   15 |     ElectromechanicalState* electro_state;
+      |     ^~~~~~~~~~~~~~~~~~~~~~
+      |     ElectromechanicalEngine
+server/lums/lums_backend.c: In function ‘lums_backend_init’:
+server/lums/lums_backend.c:89:32: error: implicit declaration of function ‘create_electromechanical_state’; did you mean ‘init_electromechanical_system’? [-Wimplicit-function-declaration]
+   89 |     g_backend->electro_state = create_electromechanical_state();
+      |                                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                                init_electromechanical_system
+server/lums/lums_backend.c:89:30: error: assignment to ‘int *’ from ‘int’ makes pointer from integer without a cast [-Wint-conversion]
+   89 |     g_backend->electro_state = create_electromechanical_state();
+      |                              ^
+server/lums/lums_backend.c:106:9: error: implicit declaration of function ‘destroy_electromechanical_state’; did you mean ‘init_electromechanical_system’? [-Wimplicit-function-declaration]
+  106 |         destroy_electromechanical_state(g_backend->electro_state);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |         init_electromechanical_system
+server/lums/lums_backend.c: In function ‘lums_compute_fusion_real’:
+server/lums/lums_backend.c:168:9: error: implicit declaration of function ‘simulate_relay_operation’ [-Wimplicit-function-declaration]
+  168 |         simulate_relay_operation(g_backend->electro_state,
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~
+server/lums/lums_backend.c:169:48: error: ‘OPERATION_FUSION’ undeclared (first use in this function)
+  169 |                                  lum_a, lum_b, OPERATION_FUSION);
+      |                                                ^~~~~~~~~~~~~~~~
+server/lums/lums_backend.c:169:48: note: each undeclared identifier is reported only once for each function it appears in
+server/lums/lums_backend.c: At top level:
+server/lums/lums_backend.c:212:5: error: conflicting types for ‘lums_compute_split_real’; have ‘int(uint64_t,  uint64_t *, uint64_t *)’ {aka ‘int(long unsigned int,  long unsigned int *, long unsigned int *)’}
+  212 | int lums_compute_split_real(uint64_t lum_source, uint64_t* result_a, uint64_t* result_b) {
+      |     ^~~~~~~~~~~~~~~~~~~~~~~
+server/lums/lums_backend.h:76:5: note: previous declaration of ‘lums_compute_split_real’ with type ‘int(uint64_t,  int,  uint64_t *)’ {aka ‘int(long unsigned int,  int,  long unsigned int *)’}
+   76 | int lums_compute_split_real(uint64_t lum_input, int zones, uint64_t* results);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~
+server/lums/lums_backend.c: In function ‘lums_compute_split_real’:
+server/lums/lums_backend.c:236:49: error: ‘OPERATION_SPLIT’ undeclared (first use in this function)
+  236 |                                  lum_source, 0, OPERATION_SPLIT);
+      |                                                 ^~~~~~~~~~~~~~~
+server/lums/lums_backend.c: In function ‘lums_compute_cycle_real’:
+server/lums/lums_backend.c:307:53: error: ‘OPERATION_CYCLE’ undeclared (first use in this function)
+  307 |                                      lum_source, i, OPERATION_CYCLE);
+      |                                                     ^~~~~~~~~~~~~~~
+server/lums/lums_backend.c: In function ‘lums_compute_sqrt_via_lums’:
+server/lums/lums_backend.c:450:82: error: ‘OPERATION_CYCLE’ undeclared (first use in this function)
+  450 |             simulate_relay_operation(g_backend->electro_state, x_lum, guess_lum, OPERATION_CYCLE);
+      |                                                                                  ^~~~~~~~~~~~~~~
+server/lums/lums_backend.c: In function ‘lums_test_prime_real’:
+server/lums/lums_backend.c:494:70: error: ‘OPERATION_CYCLE’ undeclared (first use in this function)
+  494 |         simulate_relay_operation(g_backend->electro_state, n_lum, 0, OPERATION_CYCLE);
+      |                                                                      ^~~~~~~~~~~~~~~
+server/lums/lums_backend.c: In function ‘lums_backend_comprehensive_test’:
+server/lums/lums_backend.c:580:16: error: implicit declaration of function ‘uint64_to_binary_string’; did you mean ‘decode_to_binary_string’? [-Wimplicit-function-declaration]
+  580 |                uint64_to_binary_string(result_fusion));
+      |                ^~~~~~~~~~~~~~~~~~~~~~~
+      |                decode_to_binary_string
+server/lums/lums_backend.c: At top level:
+server/lums/lums_backend.c:694:7: error: conflicting types for ‘uint64_to_binary_string’; have ‘char *(uint64_t)’ {aka ‘char *(long unsigned int)’}
+  694 | char* uint64_to_binary_string(uint64_t value) {
+      |       ^~~~~~~~~~~~~~~~~~~~~~~
+server/lums/lums_backend.c:580:16: note: previous implicit declaration of ‘uint64_to_binary_string’ with type ‘int()’
+  580 |                uint64_to_binary_string(result_fusion));
+      |                ^~~~~~~~~~~~~~~~~~~~~~~
+In file included from /nix/store/41pf3md9zgpda9kwh6rzn5kaddf7i0lp-glibc-2.40-66-dev/include/unistd.h:226,
+                 from server/lums/vorax.c:7:
+server/lums/vorax.c: In function ‘vorax_create_engine’:
+server/lums/vorax.c:598:28: error: incompatible types when assigning to type ‘VoraxZone’ from type ‘void *’
+  598 |         engine->zones[i] = NULL;
+      |                            ^~~~
+server/lums/vorax.c: In function ‘vorax_destroy_engine’:
+server/lums/vorax.c:614:13: error: used struct type value where scalar is required
+  614 |         if (engine->zones[i]) {
+      |             ^~~~~~
+server/lums/vorax.c:615:33: error: invalid type argument of ‘->’ (have ‘VoraxZone’)
+  615 |             if (engine->zones[i]->lums) {
+      |                                 ^~
+server/lums/vorax.c:616:38: error: invalid type argument of ‘->’ (have ‘VoraxZone’)
+  616 |                 free(engine->zones[i]->lums);
+      |                                      ^~
+server/lums/vorax.c:618:31: error: incompatible type for argument 1 of ‘free’
+  618 |             free(engine->zones[i]);
+      |                  ~~~~~~~~~~~~~^~~
+      |                               |
+      |                               VoraxZone
+In file included from server/lums/lums.h:5,
+                 from server/lums/vorax.c:1:
+/nix/store/41pf3md9zgpda9kwh6rzn5kaddf7i0lp-glibc-2.40-66-dev/include/stdlib.h:687:25: note: expected ‘void *’ but argument is of type ‘VoraxZone’
+  687 | extern void free (void *__ptr) __THROW;
+      |                   ~~~~~~^~~~~
+server/lums/vorax.c: In function ‘vorax_fuse_zones’:
+server/lums/vorax.c:630:9: error: wrong type argument to unary exclamation mark
+  630 |     if (!engine->zones[zone1] || !engine->zones[zone2]) return -1;
+      |         ^
+server/lums/vorax.c:630:34: error: wrong type argument to unary exclamation mark
+  630 |     if (!engine->zones[zone1] || !engine->zones[zone2]) return -1;
+      |                                  ^
+server/lums/vorax.c:632:20: error: incompatible types when initializing type ‘LUMGroup *’ using type ‘VoraxZone’
+  632 |     LUMGroup* g1 = engine->zones[zone1];
+      |                    ^~~~~~
+server/lums/vorax.c:633:20: error: incompatible types when initializing type ‘LUMGroup *’ using type ‘VoraxZone’
+  633 |     LUMGroup* g2 = engine->zones[zone2];
+      |                    ^~~~~~
+server/lums/vorax.c: In function ‘vorax_split_zone’:
+server/lums/vorax.c:659:9: error: wrong type argument to unary exclamation mark
+  659 |     if (!engine->zones[zone]) return -1;
+      |         ^
+server/lums/vorax.c:661:24: error: incompatible types when initializing type ‘LUMGroup *’ using type ‘VoraxZone’
+  661 |     LUMGroup* source = engine->zones[zone];
+      |                        ^~~~~~
+server/lums/vorax.c:673:39: error: incompatible types when assigning to type ‘VoraxZone’ from type ‘void *’
+  673 |         engine->zones[new_zone_idx] = malloc(sizeof(LUMGroup));
+      |                                       ^~~~~~
+server/lums/vorax.c:674:13: error: wrong type argument to unary exclamation mark
+  674 |         if (!engine->zones[new_zone_idx]) return -1;
+      |             ^
+server/lums/vorax.c:677:36: error: invalid type argument of ‘->’ (have ‘VoraxZone’)
+  677 |         engine->zones[new_zone_idx]->lums = malloc(sizeof(LUM) * part_size);
+      |                                    ^~
+server/lums/vorax.c:678:36: error: invalid type argument of ‘->’ (have ‘VoraxZone’)
+  678 |         engine->zones[new_zone_idx]->count = part_size;
+      |                                    ^~
+server/lums/vorax.c:682:43: error: invalid type argument of ‘->’ (have ‘VoraxZone’)
+  682 |         memcpy(engine->zones[new_zone_idx]->lums,
+      |                                           ^~
+server/lums/vorax.c: In function ‘vorax_cycle_zone’:
+server/lums/vorax.c:693:9: error: wrong type argument to unary exclamation mark
+  693 |     if (!engine->zones[zone]) return -1;
+      |         ^
+server/lums/vorax.c:695:23: error: incompatible types when initializing type ‘LUMGroup *’ using type ‘VoraxZone’
+  695 |     LUMGroup* group = engine->zones[zone];
+      |                       ^~~~~~
+bash: ./build/tests/scientific_validation_complete: No such file or directory
+~/workspace$ 
