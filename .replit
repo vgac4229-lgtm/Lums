@@ -1,4 +1,4 @@
-modules = ["cpp-clang14", "nodejs-20", "c-clang14"]
+modules = ["cpp-clang14", "c-clang14", "nodejs-20"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 compile = "make"
