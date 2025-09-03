@@ -6,6 +6,9 @@
 #include <unistd.h>
 #include <time.h>
 #include <sys/random.h>
+#include <openssl/evp.h>
+#include <openssl/sha.h>
+#include <openssl/rand.h>
 
 // Structure pour les métriques cryptographiques réelles
 typedef struct {
@@ -54,55 +57,51 @@ void end_crypto_measurement(CryptoRealMetrics* metrics) {
                             (end_time.tv_nsec - metrics->start_time.tv_nsec);
 }
 
-// Implémentation SHA-3 simplifiée (SHA-256 comme fallback)
-int compute_sha3_256_simple(const void *data, size_t len, unsigned char out[32], CryptoRealMetrics* metrics) {
+// Implémentation SHA-3 RÉELLE avec OpenSSL
+int compute_sha3_256_real(const void *data, size_t len, unsigned char out[32], CryptoRealMetrics* metrics) {
     if (!data || !out || !metrics) return -1;
     
     // Initialiser les métriques
     init_crypto_metrics(metrics);
     start_crypto_measurement(metrics);
     
-    // Utiliser SHA-256 comme fallback (plus simple)
-    // Implémentation basique de SHA-256
-    uint32_t h[8] = {
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
-    };
-    
-    // Traitement simplifié des données
-    const uint8_t* input = (const uint8_t*)data;
-    uint64_t total_bits = len * 8;
-    
-    // Ajouter padding
-    uint8_t padded[64];
-    memset(padded, 0, 64);
-    memcpy(padded, input, len < 64 ? len : 64);
-    padded[len < 64 ? len : 63] = 0x80;
-    
-    // Traiter le bloc
-    for (int i = 0; i < 16; i++) {
-        uint32_t w = (padded[i*4] << 24) | (padded[i*4+1] << 16) | 
-                     (padded[i*4+2] << 8) | padded[i*4+3];
-        
-        // Rotation simple
-        h[i % 8] ^= w;
-        h[i % 8] = (h[i % 8] << 1) | (h[i % 8] >> 31);
+    // Utiliser SHA-3-256 RÉEL d'OpenSSL
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        end_crypto_measurement(metrics);
+        return -1;
     }
     
-    // Copier le résultat
-    for (int i = 0; i < 8; i++) {
-        out[i*4] = (h[i] >> 24) & 0xFF;
-        out[i*4+1] = (h[i] >> 16) & 0xFF;
-        out[i*4+2] = (h[i] >> 8) & 0xFF;
-        out[i*4+3] = h[i] & 0xFF;
+    // Initialiser avec SHA-3-256
+    if (EVP_DigestInit_ex(ctx, EVP_sha3_256(), NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        end_crypto_measurement(metrics);
+        return -1;
     }
+    
+    // Mettre à jour avec les données
+    if (EVP_DigestUpdate(ctx, data, len) != 1) {
+        EVP_MD_CTX_free(ctx);
+        end_crypto_measurement(metrics);
+        return -1;
+    }
+    
+    // Finaliser et obtenir le hash
+    unsigned int hash_len;
+    if (EVP_DigestFinal_ex(ctx, out, &hash_len) != 1) {
+        EVP_MD_CTX_free(ctx);
+        end_crypto_measurement(metrics);
+        return -1;
+    }
+    
+    EVP_MD_CTX_free(ctx);
     
     // Finaliser les métriques
     end_crypto_measurement(metrics);
     metrics->sha3_time_ns = metrics->total_time_ns;
     metrics->sha3_cycles = metrics->total_cycles;
     metrics->sha3_input_size = len;
-    metrics->sha3_output_size = 32;
+    metrics->sha3_output_size = hash_len;
     
     return 0;
 }
@@ -177,7 +176,7 @@ int sign_simple(const uint8_t *message, size_t message_len,
     // Créer un hash du message
     uint8_t message_hash[32];
     CryptoRealMetrics hash_metrics;
-    if (compute_sha3_256_simple(message, message_len, message_hash, &hash_metrics) != 0) {
+    if (compute_sha3_256_real(message, message_len, message_hash, &hash_metrics) != 0) {
         end_crypto_measurement(metrics);
         return -1;
     }
@@ -208,7 +207,7 @@ int verify_simple(const uint8_t *message, size_t message_len,
     // Créer un hash du message
     uint8_t message_hash[32];
     CryptoRealMetrics hash_metrics;
-    if (compute_sha3_256_simple(message, message_len, message_hash, &hash_metrics) != 0) {
+    if (compute_sha3_256_real(message, message_len, message_hash, &hash_metrics) != 0) {
         end_crypto_measurement(metrics);
         return -1;
     }
@@ -255,7 +254,7 @@ int test_crypto_performance_real(void) {
         }
         
         // Calculer SHA-3
-        if (compute_sha3_256_simple(data, sizeof(data), hash, &metrics) == 0) {
+        if (compute_sha3_256_real(data, sizeof(data), hash, &metrics) == 0) {
             total_metrics.sha3_time_ns += metrics.sha3_time_ns;
             total_metrics.sha3_cycles += metrics.sha3_cycles;
             successful_tests++;
@@ -340,7 +339,7 @@ int test_crypto_validation_real(void) {
     uint8_t computed_hash[32];
     CryptoRealMetrics metrics;
     
-    if (compute_sha3_256_simple(test_data, strlen(test_data), computed_hash, &metrics) == 0) {
+    if (compute_sha3_256_real(test_data, strlen(test_data), computed_hash, &metrics) == 0) {
         printf("✅ SHA-3 calculé avec succès\n");
         printf("  Temps: %.1f ns, Cycles: %lu\n", metrics.sha3_time_ns, (unsigned long)metrics.sha3_cycles);
         printf("  Hash: ");

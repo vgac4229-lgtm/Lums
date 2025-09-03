@@ -15,8 +15,7 @@ LIBRARY = $(BUILDDIR)/liblums.a
 
 # Déclaration des objets LUMS pour la librairie
 LUMS_OBJECTS = build/server/lums/decoder.o build/server/lums/encoder.o build/server/lums/operations.o \
-               build/server/lums/vorax.o build/server/lums/lums_backend.o build/server/lums/electromechanical.o \
-               build/server/lums/electromechanical_impl.o build/server/lums/advanced-math.o build/server/lums/lumgroup.o \
+               build/server/lums/vorax.o build/server/lums/lums_backend.o build/server/lums/advanced-math.o build/server/lums/lumgroup.o \
                build/server/lums/jit_compiler.o build/server/lums/vorax_simple.o build/server/lums/scientific_logger.o \
                build/server/lums/real_hardware.o build/server/lums/crypto_real.o build/server/lums/scientific_validation.o
 
@@ -66,10 +65,7 @@ build/server/lums/vorax.o: server/lums/vorax.c
 	$(CC) $(CFLAGS) -c $< -o $@
 build/server/lums/lums_backend.o: server/lums/lums_backend.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/electromechanical.o: server/lums/electromechanical.c
-	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/electromechanical_impl.o: server/lums/electromechanical_impl.c
-	$(CC) $(CFLAGS) -c $< -o $@
+# Modules électromécaniques supprimés - utilisation hardware réel uniquement
 build/server/lums/advanced-math.o: server/lums/advanced-math.c
 	$(CC) $(CFLAGS) -c $< -o $@
 build/server/lums/lumgroup.o: server/lums/lumgroup.c
@@ -80,6 +76,9 @@ build/server/lums/vorax_simple.o: server/lums/vorax_simple.c
 	$(CC) $(CFLAGS) -c $< -o $@
 build/server/lums/scientific_logger.o: server/lums/scientific_logger.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+build/server/lums/crypto_real.o: server/lums/crypto_real.c
+	$(CC) $(CFLAGS) -c $< -o $@ -lssl -lcrypto
 
 # Compilation objets pour les tests
 $(BUILDDIR)/%.o: %.c | $(BUILDDIR)
