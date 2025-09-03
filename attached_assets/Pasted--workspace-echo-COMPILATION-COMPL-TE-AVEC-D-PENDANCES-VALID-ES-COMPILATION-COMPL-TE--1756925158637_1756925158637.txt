@@ -1,0 +1,78 @@
+~/workspace$ echo "=== COMPILATION COMPLÈTE AVEC DÉPENDANCES VALIDÉES ==="
+=== COMPILATION COMPLÈTE AVEC DÉPENDANCES VALIDÉES ===
+~/workspace$ make all
+gcc -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare -mavx2 -mfma -I/nix/store/0225zs9jl9s2y3ai1arbg0h9z7z4bmfi-openssl-3.4.1-dev/include -c server/lums/decoder.c -o build/server/lums/decoder.o
+server/lums/decoder.c: In function ‘decode_lum_to_bit’:
+server/lums/decoder.c:16:20: error: request for member ‘presence’ in something not a structure or union
+   16 |         if (lums[i].presence) {
+      |                    ^
+server/lums/decoder.c: In function ‘decode_lum_group’:
+server/lums/decoder.c:32:35: error: passing argument 1 of ‘decode_lum_to_bit’ from incompatible pointer type [-Wincompatible-pointer-types]
+   32 |     return decode_lum_to_bit(group->lums, group->count);
+      |                              ~~~~~^~~~~~
+      |                                   |
+      |                                   LUMStruct *
+server/lums/decoder.c:8:33: note: expected ‘LUM *’ {aka ‘long unsigned int *’} but argument is of type ‘LUMStruct *’
+    8 | uint64_t decode_lum_to_bit(LUM* lums, size_t count) {
+      |                            ~~~~~^~~~
+server/lums/decoder.c: In function ‘decode_to_binary_string’:
+server/lums/decoder.c:49:28: error: request for member ‘presence’ in something not a structure or union
+   49 |         result[i] = lums[i].presence ? '1' : '0';
+      |                            ^
+server/lums/decoder.c: In function ‘decode_clustered_groups’:
+server/lums/decoder.c:122:37: error: ‘LUMStruct’ has no member named ‘structure_type’
+  122 |             (i > 0 && group->lums[i].structure_type != group->lums[i-1].structure_type)) {
+      |                                     ^
+server/lums/decoder.c:122:72: error: ‘LUMStruct’ has no member named ‘structure_type’
+  122 |  (i > 0 && group->lums[i].structure_type != group->lums[i-1].structure_type)) {
+      |                                                             ^
+
+server/lums/decoder.c: In function ‘validate_lums’:
+server/lums/decoder.c:151:20: error: request for member ‘presence’ in something not a structure or union
+  151 |         if (lums[i].presence != 0 && lums[i].presence != 1) {
+      |                    ^
+server/lums/decoder.c:151:45: error: request for member ‘presence’ in something not a structure or union
+  151 |         if (lums[i].presence != 0 && lums[i].presence != 1) {
+      |                                             ^
+server/lums/decoder.c:156:20: error: request for member ‘structure_type’ in something not a structure or union
+  156 |         if (lums[i].structure_type < LUM_LINEAR || lums[i].structure_type > LUM_CYCLE) {
+      |                    ^
+server/lums/decoder.c:156:38: error: ‘LUM_LINEAR’ undeclared (first use in this function)
+  156 |         if (lums[i].structure_type < LUM_LINEAR || lums[i].structure_type > LUM_CYCLE) {
+      |                                      ^~~~~~~~~~
+server/lums/decoder.c:156:38: note: each undeclared identifier is reported only once for each function it appears in
+server/lums/decoder.c:156:59: error: request for member ‘structure_type’ in something not a structure or union
+  156 |         if (lums[i].structure_type < LUM_LINEAR || lums[i].structure_type > LUM_CYCLE) {
+      |                                                           ^
+server/lums/decoder.c:156:77: error: ‘LUM_CYCLE’ undeclared (first use in this function)
+  156 | [i].structure_type < LUM_LINEAR || lums[i].structure_type > LUM_CYCLE) {
+      |                                                             ^~~~~~~~~
+
+server/lums/decoder.c:161:20: error: request for member ‘position’ in something not a structure or union
+  161 |         if (lums[i].position.x < -10000 || lums[i].position.x > 10000 ||
+      |                    ^
+server/lums/decoder.c:161:51: error: request for member ‘position’ in something not a structure or union
+  161 |         if (lums[i].position.x < -10000 || lums[i].position.x > 10000 ||
+      |                                                   ^
+server/lums/decoder.c:162:20: error: request for member ‘position’ in something not a structure or union
+  162 |             lums[i].position.y < -10000 || lums[i].position.y > 10000) {
+      |                    ^
+server/lums/decoder.c:162:51: error: request for member ‘position’ in something not a structure or union
+  162 |             lums[i].position.y < -10000 || lums[i].position.y > 10000) {
+      |                                                   ^
+server/lums/decoder.c:169:29: error: request for member ‘position’ in something not a structure or union
+  169 |             int dx = lums[i].position.x - lums[i-1].position.x;
+      |                             ^
+server/lums/decoder.c:169:52: error: request for member ‘position’ in something not a structure or union
+  169 |             int dx = lums[i].position.x - lums[i-1].position.x;
+      |                                                    ^
+server/lums/decoder.c:170:29: error: request for member ‘position’ in something not a structure or union
+  170 |             int dy = lums[i].position.y - lums[i-1].position.y;
+      |                             ^
+server/lums/decoder.c:170:52: error: request for member ‘position’ in something not a structure or union
+  170 |             int dy = lums[i].position.y - lums[i-1].position.y;
+      |                                                    ^
+make: *** [Makefile:60: build/server/lums/decoder.o] Error 1
+~/workspace$ echo "Status compilation: $?"
+Status compilation: 2
+~/workspace$ 

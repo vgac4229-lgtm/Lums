@@ -1,11 +1,11 @@
-modules = ["cpp-clang14", "c-clang14", "nodejs-20"]
+modules = ["c-clang14", "cpp-clang14", "nodejs-20", "python-3.11"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 compile = "make"
 
 [nix]
 channel = "stable-25_05"
-packages = ["unzip"]
+packages = ["unzip", "cjson", "openssl", "pkg-config", "bc"]
 
 [deployment]
 deploymentTarget = "autoscale"

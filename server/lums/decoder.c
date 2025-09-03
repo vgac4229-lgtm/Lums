@@ -5,7 +5,7 @@
 /**
  * Decode LUMS back to bits
  */
-uint64_t decode_lum_to_bit(LUM* lums, size_t count) {
+uint64_t decode_lum_to_bit(LUMStruct* lums, size_t count) {
     if (!lums || count == 0 || count > 64) {
         return 0;
     }
@@ -35,7 +35,7 @@ uint64_t decode_lum_group(LUMGroup* group) {
 /**
  * Decode LUMS to binary string
  */
-char* decode_to_binary_string(LUM* lums, size_t count) {
+char* decode_to_binary_string(LUMStruct* lums, size_t count) {
     if (!lums || count == 0) {
         return NULL;
     }
@@ -141,7 +141,7 @@ int decode_clustered_groups(LUMGroup* group, uint64_t* values, size_t max_values
 /**
  * Validate LUM structure integrity
  */
-int validate_lums(LUM* lums, size_t count) {
+int validate_lums(LUMStruct* lums, size_t count) {
     if (!lums) {
         return 0;
     }

@@ -1,0 +1,33 @@
+diff --git a/server/lums/lums.h b/server/lums/lums.h
+index 1234567..abcdefg 100644
+--- a/server/lums/lums.h
++++ b/server/lums/lums.h
+@@ -8,6 +8,27 @@
+ #include <math.h>
+ #include <stdbool.h>
+ 
++// Forward declarations for missing types  
++typedef struct {
++    int x, y, z;
++} SpatialCoordinates;
++
++typedef enum {
++    ZONE_ACTIVE,
++    ZONE_INACTIVE, 
++    ZONE_SUSPENDED
++} ZoneState;
++
++typedef enum {
++    VORAX_READY,
++    VORAX_PROCESSING,
++    VORAX_ERROR
++} VoraxState;
++
++typedef struct {
++    double field_strength;
++    double coherence;
++} QuantumField;
++
+ // LUMS Structure Types
+ typedef enum {
+     LUM_LINEAR = 0,

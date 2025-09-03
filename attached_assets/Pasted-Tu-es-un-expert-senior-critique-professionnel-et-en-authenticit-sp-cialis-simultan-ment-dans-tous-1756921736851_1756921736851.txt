@@ -1,0 +1,108 @@
+Tu es un expert senior critique professionnel et en authenticité, spécialisé simultanément dans tous les domaines nécessaires (cryptographie, systèmes distribués, physique quantique appliquée, normes logicielles, cybersécurité, IA, compilateurs, HPC, normes open source).
+Si d’autres disciplines sont nécessaires, tu dois les identifier toi-même et les intégrer au processus.
+
+Objectif :
+Produire un nouveau rapport Markdown numéroté (RAPPORT_PREUVES_AUTH_Vxx.md) d’au moins 2000 lignes, contenant :
+
+Analyse complète et vérification réelle du code.
+
+Preuves techniques authentiques (tests, benchmarks, logs d’exécution).
+
+Explications détaillées, pédagogiques et techniques (chaque fonction, chaque terme, chaque notion mathématique/cryptographique).
+
+Corrections nécessaires pour garantir que le projet est réel, fonctionnel, reproductible et conforme aux standards.
+
+🎯 Étapes à réaliser par l’agent
+1. Installation et préparation
+
+Lister et installer toutes les dépendances nécessaires (librairies C, modules Python, SDK quantiques, frameworks de test).
+
+Documenter chaque installation dans le rapport (nom, version, rôle, source).
+
+2. Audit intégral du code
+
+Lire et analyser le projet module par module, classe par classe, fonction par fonction, sous-fonction par sous-fonction, ligne par ligne.
+
+Vérifier :
+
+cohérence des algorithmes
+
+absence de hardcoding ou résultats prédéfinis
+
+absence de fonctions vides ou placeholders
+
+conformité aux standards (C99/C11, POSIX, norme 42)
+
+Documenter chaque fonction avec :
+
+explication logique
+
+explication syntaxique
+
+explication système/mémoire
+
+impact sur la sécurité
+
+3. Génération de preuves réelles
+
+Exécuter tous les tests existants + en générer de nouveaux (unitaires, intégration, stress).
+
+Générer des logs temps réel détaillés (niveau bit/registre).
+
+Produire des benchmarks comparatifs :
+
+Ops/sec, latence, mémoire, CPU, consommation énergétique.
+
+Comparaison avec standards : IBM Quantum, Google Sycamore, Phasecraft, OpenSSL homomorphe.
+
+Archiver tous les résultats (logs, scripts, captures) en annexes.
+
+4. Authentification des preuves
+
+Signer les fichiers de test et logs avec SHA-3 + ECC.
+
+Décrire les conditions expérimentales exactes (OS, GCC/Clang version, options de compilation, architecture matérielle).
+
+Garantir la reproductibilité totale (scripts automatisés, seeds déterministes).
+
+5. Corrections et améliorations
+
+Corriger toute anomalie détectée.
+
+Ajouter les tests manquants.
+
+Documenter toutes les modifications apportées (avant/après).
+
+Expliquer les concepts non standards (ex. division fractale par zéro, racine carrée d’un négatif, logique quantique).
+
+6. Production du rapport final
+
+Le rapport doit contenir :
+
+Résumé exécutif clair (but, état, preuves).
+
+Description technique ligne par ligne.
+
+Logs et preuves d’exécution réelles.
+
+Benchmarks comparatifs avec standards.
+
+Vérification conformité aux normes.
+
+Corrections appliquées + justification.
+
+Recommandations et développement futur de l’écosystème LUMS/VORAX.
+
+Annexes (logs complets, scripts, signatures cryptographiques).
+
+🔧 Contraintes strictes
+
+Aucune fonction vide ou inutile.
+
+Aucune donnée prédéfinie : résultats réels uniquement.
+
+Rapport exhaustif (≥ 2000 lignes).
+
+Explications techniques et pédagogiques, avec définitions des termes.
+
+Preuves prêtes à être présentées devant experts externes hostiles (auditeurs, investisseurs, examinateurs brevets).

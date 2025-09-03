@@ -2,176 +2,155 @@
 #define LUMS_H
 
 #include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <math.h>
-#include <stdbool.h>
+#include <time.h>
 
-// Forward declarations for missing types
-typedef struct {
-    int x, y, z;
-} SpatialCoordinates;
+// Version et métadonnées
+#define LUMS_VERSION_MAJOR 1
+#define LUMS_VERSION_MINOR 0
+#define LUMS_VERSION_PATCH 0
+#define LUMS_VERSION_STRING "1.0.0-validated"
 
-typedef enum {
-    ZONE_ACTIVE,
-    ZONE_INACTIVE,
-    ZONE_SUSPENDED
-} ZoneState;
+// Constantes système
+#define LUMS_MAX_ZONES 16
+#define LUMS_MAX_LUM_COUNT 1024
+#define LUMS_CONSERVATION_THRESHOLD 0.9999
+#define LUMS_ENTROPY_SCALING_FACTOR 1e-6
 
-typedef enum {
-    VORAX_READY,
-    VORAX_PROCESSING,
-    VORAX_ERROR
-} VoraxState;
+// Types de base LUMS
+typedef uint64_t LUM;
+typedef uint32_t ZoneID;
+typedef uint32_t LUMCount;
 
-typedef struct {
-    double field_strength;
-    double coherence;
-} QuantumField;
-
-// LUMS Structure Types
+// Énumération des types de structure LUM
 typedef enum {
     LUM_LINEAR = 0,
-    LUM_GROUP = 1,
-    LUM_NODE = 2,
-    LUM_CYCLE = 3,
-    LUM_CLUSTER = 4
-} LumStructureType;
+    LUM_CLUSTERED = 1,
+    LUM_MEMORY = 2,
+    LUM_NODE = 3,
+    LUM_CYCLE = 4
+} LUMStructureType;
 
-// Group Types
-typedef enum {
-    GROUP_LINEAR = 0,
-    GROUP_CLUSTER = 1,
-    GROUP_NODE = 2,
-    GROUP_MEMORY = 3,
-    GROUP_FRACTAL = 4,
-    GROUP_INVERTED = 5,
-    GROUP_INFINITE = 6,
-    GROUP_HARMONIC = 7
-} GroupType;
-
-// Core LUM structure
-// Forward declaration for spatial data
-typedef struct SpatialData SpatialData;
-
+// Structure pour position 2D
 typedef struct {
-    uint8_t presence;              // 0 or 1
-    LumStructureType structure_type;
-    SpatialData* spatial_data;     // Type-safe spatial information
-    struct {
-        int x, y;                  // Position in space
-    } position;
-} LUM;
+    int x;
+    int y;
+} LUMPosition;
 
-// Type-safe spatial data structure
-typedef struct SpatialData {
-    enum { SPATIAL_NONE, SPATIAL_METADATA, SPATIAL_FLOW } type;
-    union {
-        char* metadata;
-        struct {
-            char* target_zone;
-            double flow_rate;
-        } flow_data;
-    } data;
-} SpatialData;
+// Structure LUM de base
+typedef struct {
+    LUM value;                    // Valeur LUM (64 bits)
+    double presence;              // Facteur de présence [0.0, 1.0]
+    uint32_t zone_id;            // Identifiant de zone
+    uint64_t timestamp_ns;       // Timestamp nanoseconde
+    LUMStructureType structure_type; // Type de structure
+    LUMPosition position;        // Position spatiale
+    void* spatial_data;          // Données spatiales additionnelles
+} LUMStruct;
 
-// LUM Group structure
-typedef struct LUMGroup {
-    LUM* lums;
-    size_t count;
-    GroupType group_type;
-    char* id;
-    struct LUMGroup** connections;  // Links to other groups
-    size_t connection_count;
-    void* spatial_data;            // Additional spatial metadata
+// Groupe de LUMs
+typedef struct {
+    LUMStruct* lums;             // Tableau de LUMs
+    size_t count;                // Nombre de LUMs
+    size_t capacity;             // Capacité allouée
+    double total_conservation;   // Conservation totale
+    uint64_t group_id;          // Identifiant unique du groupe
 } LUMGroup;
 
-// VORAX Zone structure
-typedef struct VoraxZone {
-    LUMGroup* group;
-    uint32_t zone_id;
-    SpatialCoordinates position;
-    ZoneState state;
+// Zone VORAX
+typedef struct {
+    LUMGroup* group;             // Groupe de LUMs dans cette zone
+    uint32_t zone_id;           // Identifiant de zone
+    char name[64];              // Nom de la zone
+    bool is_active;             // État d'activité
+    uint64_t last_operation_ns; // Dernière opération
 } VoraxZone;
 
-// VORAX Memory structure
+// Moteur VORAX
 typedef struct {
-    char* name;
-    LUMGroup* stored_group;
-    time_t timestamp;
-} VoraxMemory;
-
-#define MAX_ZONES 16
-#define MAX_MEMORY_SLOTS 32
-
-// VORAX Engine state
-typedef struct {
-    VoraxZone* zones[MAX_ZONES];
-    uint32_t active_zones;
-    VoraxState state;
-    QuantumField quantum_field;
+    VoraxZone* zones;           // Tableau de zones
+    size_t zone_count;          // Nombre de zones
+    size_t max_zones;           // Nombre maximum de zones
+    uint64_t total_operations;  // Nombre total d'opérations
+    double global_conservation; // Conservation globale
 } VoraxEngine;
 
-// Core encoding/decoding functions
-LUM* encode_bit_to_lum(uint64_t input, size_t bit_count);
-uint64_t decode_lum_to_bit(LUM* lums, size_t count);
-LUMGroup* encode_binary_string(const char* binary_str);
-char* decode_to_binary_string(LUM* lums, size_t count);
+// Métriques de performance
+typedef struct {
+    uint64_t operations_count;   // Nombre d'opérations
+    uint64_t total_cycles;      // Cycles CPU totaux
+    uint64_t total_time_ns;     // Temps total en nanosecondes
+    double average_conservation; // Conservation moyenne
+    size_t memory_usage_bytes;  // Utilisation mémoire
+} PerformanceMetrics;
 
-// Group management
-LUMGroup* create_lum_group(LUM* lums, size_t count, GroupType type);
-void free_lum_group(LUMGroup* group);
-LUMGroup* clone_lum_group(LUMGroup* source);
-int compare_lum_groups(LUMGroup* group1, LUMGroup* group2);
-void print_lum_group(LUMGroup* group);
+// Types d'opération VORAX
+typedef enum {
+    VORAX_OP_FUSION = 0,
+    VORAX_OP_SPLIT = 1,
+    VORAX_OP_CYCLE = 2,
+    VORAX_OP_TRANSFER = 3,
+    VORAX_OP_VALIDATE = 4
+} VoraxOperationType;
 
-// Advanced mathematics via LUMS
-LUMGroup* resolve_division_by_zero(LUMGroup* numerator);
-LUMGroup* sqrt_negative_via_lums(int negative_value);
-LUMGroup* represent_graham_number(int precision_level);
-int test_riemann_hypothesis_lums(double s_real, double s_imag);
+// Résultat d'opération
+typedef struct {
+    VoraxOperationType type;     // Type d'opération
+    bool success;               // Succès de l'opération
+    double conservation_factor; // Facteur de conservation
+    uint64_t execution_time_ns; // Temps d'exécution
+    char error_message[256];    // Message d'erreur si échec
+} OperationResult;
 
-// VORAX Operations
-LUMGroup* lum_fusion(LUMGroup* group1, LUMGroup* group2);
-LUMGroup** lum_split(LUMGroup* source, int zones, size_t* result_count);
-LUMGroup* lum_cycle(LUMGroup* source, int modulo);
-LUMGroup* lum_flow(LUMGroup* source, const char* target_zone);
+// ============================================================================
+// DÉCLARATIONS DES FONCTIONS PRINCIPALES
+// ============================================================================
 
-// VORAX Engine functions
-VoraxEngine* create_vorax_engine(void);
-void free_vorax_engine(VoraxEngine* engine);
-int vorax_add_zone(VoraxEngine* engine, const char* name, int x, int y, int width, int height);
-int vorax_set_zone_group(VoraxEngine* engine, const char* zone_name, LUMGroup* group);
-LUMGroup* vorax_get_zone_group(VoraxEngine* engine, const char* zone_name);
-int vorax_store_memory(VoraxEngine* engine, const char* name, LUMGroup* group);
-LUMGroup* vorax_retrieve_memory(VoraxEngine* engine, const char* name);
+// Initialisation et nettoyage
+int lums_init(void);
+void lums_cleanup(void);
 
-// Validation and debugging
-int validate_lums(LUM* lums, size_t count);
-void print_vorax_engine_state(VoraxEngine* engine);
+// Gestion des groupes LUM
+LUMGroup* lums_group_create(size_t initial_capacity);
+void lums_group_destroy(LUMGroup* group);
+int lums_group_add(LUMGroup* group, LUM value, double presence);
+bool lums_group_validate_conservation(const LUMGroup* group);
 
-// Error handling
-const char* vorax_get_last_error(VoraxEngine* engine);
-void vorax_clear_error(VoraxEngine* engine);
-void vorax_set_error(VoraxEngine* engine, const char* error_msg);
+// Opérations VORAX de base
+int lums_compute_fusion_real(uint64_t lum_a, uint64_t lum_b, uint64_t* result);
+int lums_compute_split_real(uint64_t lum_source, uint64_t* result_a, uint64_t* result_b);
+int lums_compute_cycle_real(uint64_t lum_input, int modulo, uint64_t* result);
 
-// VM VORAX functions  
-VoraxEngine* vorax_create_engine(void);
-void vorax_destroy_engine(VoraxEngine* engine);
-int vorax_fuse_zones(VoraxEngine* engine, int zone1, int zone2);
-int vorax_split_zone(VoraxEngine* engine, int zone, int parts);
-int vorax_move_lums(VoraxEngine* engine, int src_zone, int dst_zone, int amount);
-int vorax_cycle_zone(VoraxEngine* engine, int zone, int modulo);
-int vorax_store_memory_by_slot(VoraxEngine* engine, int memory_slot, int zone, int amount);
-int vorax_retrieve_memory_by_slot(VoraxEngine* engine, int memory_slot, int zone);
+// Moteur VORAX
+VoraxEngine* vorax_engine_create(size_t max_zones);
+void vorax_engine_destroy(VoraxEngine* engine);
+int vorax_engine_add_zone(VoraxEngine* engine, const char* name);
+OperationResult vorax_execute_operation(VoraxEngine* engine, VoraxOperationType type, 
+                                       uint32_t zone_a, uint32_t zone_b, uint32_t target_zone);
 
-// Bootstrap sequence
-int vorax_bootstrap_phase1(void);  // Initialize core primitives
-int vorax_bootstrap_phase2(void);  // Load assembler definitions
-int vorax_bootstrap_phase3(void);  // Compile bit→LUM encoder
-int vorax_bootstrap_phase4(void);  // Initialize VM
-int vorax_bootstrap_phase5(void);  // Start console server
-int vorax_bootstrap_phase6(void);  // Compile VORAX-L
+// Validation et conservation
+bool lums_validate_conservation_law(const LUMGroup* before, const LUMGroup* after);
+double lums_calculate_entropy(const LUMGroup* group);
+PerformanceMetrics lums_get_performance_metrics(void);
+
+// Utilitaires de conversion
+char* lums_to_binary_string(LUM value);
+LUM lums_from_binary_string(const char* binary_str);
+uint32_t lums_count_active_bits(LUM value);
+
+// Fonctions de logging scientifique
+void lums_log_operation(VoraxOperationType type, uint64_t input_a, uint64_t input_b, 
+                       uint64_t result, uint64_t timestamp_ns);
+void lums_log_conservation(double before, double after, bool valid);
+
+// Constantes mathématiques
+extern const double LUMS_PI;
+extern const double LUMS_E;
+extern const uint64_t LUMS_PRIME_CONSTANT;
 
 #endif // LUMS_H

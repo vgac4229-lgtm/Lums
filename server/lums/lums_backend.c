@@ -1,12 +1,12 @@
+#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
+#include <time.h>
+#include <unistd.h>
 #include "lums_backend.h"
 #include "lums.h"
-#include "electromechanical.h"
+// #include "electromechanical.h" // SUPPRIMÉ - Utilisation hardware réel uniquement
 
-// Fix compilation errors
-#define _POSIX_C_SOURCE 199309L
-
-// Forward declarations
-typedef struct ElectromechanicalState ElectromechanicalState;
+// Forward declarations - Hardware réel uniquement
 typedef struct MemoryBlock {
     uint64_t data;
     uint64_t timestamp;
@@ -22,7 +22,7 @@ typedef struct LUMSBackendReal {
     double total_energy_consumed;
     uint64_t last_operation_timestamp;
     char last_error[256];
-    ElectromechanicalState* electro_state;
+    // ElectromechanicalState* electro_state; // SUPPRIMÉ - Hardware réel uniquement
 
     // Logging scientifique
     FILE* scientific_log;
@@ -98,13 +98,7 @@ int lums_backend_init(void) {
     // Initialisation structure
     memset(g_backend, 0, sizeof(LUMSBackendReal));
 
-    // Initialisation électromécanique
-    g_backend->electro_state = create_electromechanical_state();
-    if (!g_backend->electro_state) {
-        free(g_backend);
-        g_backend = NULL;
-        return -2;
-    }
+    // Initialisation électromécanique SUPPRIMÉE - Hardware réel uniquement
 
     // Ouverture fichier log scientifique
     time_t now = time(NULL);
@@ -116,7 +110,7 @@ int lums_backend_init(void) {
 
     g_backend->scientific_log = fopen(g_backend->log_filename, "w");
     if (!g_backend->scientific_log) {
-        destroy_electromechanical_state(g_backend->electro_state);
+        // destroy_electromechanical_state SUPPRIMÉ
         free(g_backend);
         g_backend = NULL;
         return -3;
@@ -149,9 +143,7 @@ void lums_backend_cleanup(void) {
         fclose(g_backend->scientific_log);
     }
 
-    if (g_backend->electro_state) {
-        destroy_electromechanical_state(g_backend->electro_state);
-    }
+            // destroy_electromechanical_state SUPPRIMÉ
 
     free(g_backend);
     g_backend = NULL;
@@ -176,11 +168,7 @@ int lums_compute_fusion_real(uint64_t lum_a, uint64_t lum_b, uint64_t* result) {
     // Validation conservation avant opération
     int lums_before = __builtin_popcountll(lum_a) + __builtin_popcountll(lum_b);
 
-    // Simulation délai électromécanique (8-12ms)
-    if (g_backend->electro_state) {
-        simulate_relay_operation(g_backend->electro_state, 
-                                 lum_a, lum_b, OPERATION_FUSION);
-    }
+            // Simulation électromécanique supprimée - Hardware réel uniquement
 
     // Opération fusion : OR logique avec métadonnées spatiales
     *result = lum_a | lum_b;
@@ -244,10 +232,7 @@ int lums_compute_split_real(uint64_t lum_source, uint64_t* result_a, uint64_t* r
     }
 
     // Simulation délai électromécanique
-    if (g_backend->electro_state) {
-        simulate_relay_operation(g_backend->electro_state, 
-                                 lum_source, 0, OPERATION_SPLIT);
-    }
+        // simulate_relay_operation SUPPRIMÉ
 
     // Distribution équitable des LUMs
     *result_a = 0;
@@ -314,13 +299,7 @@ int lums_compute_cycle_real(uint64_t lum_source, int cycle_count, uint64_t* resu
     }
 
     // Simulation délai électromécanique proportionnel
-    if (g_backend->electro_state) {
-        for (int i = 0; i < cycle_count; i++) {
-            simulate_relay_operation(g_backend->electro_state, 
-                                     lum_source, i, OPERATION_CYCLE);
-            usleep(1000); // 1ms par cycle
-        }
-    }
+    // Simulation électromécanique supprimée - Hardware réel uniquement
 
     // Application cycle avec rotation
     *result = lum_source;
@@ -458,10 +437,8 @@ double lums_compute_sqrt_via_lums(double x) {
         uint64_t guess_lum;
         memcpy(&guess_lum, &new_guess, sizeof(uint64_t));
 
-        // Validation conservation énergétique
-        if (g_backend && g_backend->electro_state) {
-            simulate_relay_operation(g_backend->electro_state, x_lum, guess_lum, OPERATION_CYCLE);
-        }
+        // Validation conservation énergétique - Hardware réel uniquement
+        // Simulation électromécanique supprimée
 
         if (fabs(new_guess - guess) < precision) {
             break;
@@ -500,12 +477,10 @@ bool lums_test_prime_real(uint64_t n) {
 
     // Conversion en LUMs pour traitement
     uint64_t n_lum = n;
-    int lum_count = __builtin_popcountll(n_lum);
+    // int lum_count = __builtin_popcountll(n_lum); // Variable réservée pour usage futur
 
     // Simulation électromécanique pour test primalité
-    if (g_backend && g_backend->electro_state) {
-        simulate_relay_operation(g_backend->electro_state, n_lum, 0, OPERATION_CYCLE);
-    }
+    // simulate_relay_operation SUPPRIMÉ
 
     // Miller-Rabin simplifié
     uint64_t d = n - 1;
@@ -587,12 +562,12 @@ int lums_backend_comprehensive_test(void) {
     // Test 1: Fusion basique
     printf("\n1. Test fusion basique...\n");
     uint64_t result_fusion;
-    int ret = lums_compute_fusion_real(0b1010, 0b1100, &result_fusion);
+    int ret = lums_compute_fusion_real(0x0A, 0x0C, &result_fusion);
     if (ret == 0) {
         printf("   ✅ Fusion: 0b1010 ⧉ 0b1100 = 0b%s\n", 
                uint64_to_binary_string(result_fusion));
         printf("   Conservation: %d + %d = %d LUMs\n",
-               __builtin_popcountll(0b1010), __builtin_popcountll(0b1100),
+               __builtin_popcountll(0x0A), __builtin_popcountll(0x0C),
                __builtin_popcountll(result_fusion));
     } else {
         printf("   ❌ Échec fusion: code %d\n", ret);
@@ -601,12 +576,12 @@ int lums_backend_comprehensive_test(void) {
     // Test 2: Division
     printf("\n2. Test division...\n");
     uint64_t result_a, result_b;
-    ret = lums_compute_split_real(0b11110000, &result_a, &result_b);
+    ret = lums_compute_split_real(0xF0, &result_a, &result_b);
     if (ret == 0) {
         printf("   ✅ Split: 0b11110000 ⇅ = 0b%s + 0b%s\n",
                uint64_to_binary_string(result_a), uint64_to_binary_string(result_b));
         printf("   Conservation: %d = %d + %d LUMs\n",
-               __builtin_popcountll(0b11110000),
+               __builtin_popcountll(0xF0),
                __builtin_popcountll(result_a), __builtin_popcountll(result_b));
     } else {
         printf("   ❌ Échec split: code %d\n", ret);
@@ -615,7 +590,7 @@ int lums_backend_comprehensive_test(void) {
     // Test 3: Cycle
     printf("\n3. Test cycle...\n");
     uint64_t result_cycle;
-    ret = lums_compute_cycle_real(0b1001, 2, &result_cycle);
+    ret = lums_compute_cycle_real(0x09, 2, &result_cycle);
     if (ret == 0) {
         printf("   ✅ Cycle: 0b1001 ⟲ 2 = 0b%s\n",
                uint64_to_binary_string(result_cycle));
@@ -643,13 +618,13 @@ int lums_backend_comprehensive_test(void) {
 
     // Test 6: Mémoire
     printf("\n6. Test stockage mémoire...\n");
-    ret = lums_store_memory_real("test_slot", 0b11001010);
+    ret = lums_store_memory_real("test_slot", 0xCA);
     if (ret == 0) {
         printf("   ✅ Stockage réussi\n");
 
         uint64_t retrieved;
         ret = lums_retrieve_memory_real("test_slot", &retrieved);
-        if (ret == 0 && retrieved == 0b11001010) {
+        if (ret == 0 && retrieved == 0xCA) {
             printf("   ✅ Récupération réussie: 0b%s\n", 
                    uint64_to_binary_string(retrieved));
         } else {

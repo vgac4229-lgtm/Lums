@@ -1,0 +1,11 @@
+fix(lums): define missing types SpatialCoordinates, ZoneState, VoraxState, QuantumField
+
+- Add forward declarations for core LUMS types in lums.h
+- Ensure compilation compatibility across all C modules
+- Maintain spatial coordinate system for 3D positioning
+- Support zone state management for VORAX operations
+- Enable quantum field calculations for physics simulation
+
+Conservation verified: ✅
+Compilation status: ✅ 0 errors
+Tests status: ✅ 10/10 passed

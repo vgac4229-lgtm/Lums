@@ -1,450 +1,365 @@
 #include "lums.h"
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include <stdlib.h> // Required for malloc and free
+#include <assert.h>
+#include <errno.h>
+#include <string.h> // For memset
+#include <stdlib.h> // For malloc, realloc, free
+#include <time.h>   // For time()
+#include <math.h>   // For fabs, log2, cos, sin, fmod
 
-// Assuming LOG_ERROR macro is defined elsewhere, e.g., in "log.h"
-// For this example, let's define a simple placeholder:
-#ifndef LOG_ERROR
-#define LOG_ERROR(...) fprintf(stderr, "ERROR: " __VA_ARGS__); fprintf(stderr, "\n")
-#endif
+// Assuming VoraxOperationType and LUMStructureType are defined in lums.h
+// Assuming LUMStruct is defined in lums.h
+// Assuming PerformanceMetrics is defined in lums.h
 
-// Declaration of create_lum_group, assuming it's defined in lums.h or a related file
-// This is a placeholder, the actual implementation might differ.
-// Based on the context of the provided code, it seems to be used for allocating and initializing a LUMGroup.
-LUMGroup* create_lum_group(LUM* lums, size_t count, GroupType type) {
-    LUMGroup* result = (LUMGroup*)malloc(sizeof(LUMGroup));
-    if (!result) {
-        LOG_ERROR("Memory allocation failed for LUMGroup");
-        return NULL;
+// Variables globales pour métriques
+static PerformanceMetrics g_metrics = {0};
+static bool g_lums_initialized = false;
+
+// Constantes mathématiques
+const double LUMS_PI = 3.14159265358979323846;
+const double LUMS_E = 2.71828182845904523536;
+const uint64_t LUMS_PRIME_CONSTANT = 0x1FFFFF03ULL; // Premier réel: 536870659
+const double LUMS_CONSERVATION_THRESHOLD = 0.99; // Seuil pour la conservation
+
+// ============================================================================
+// INITIALISATION ET NETTOYAGE
+// ============================================================================
+
+int lums_init(void) {
+    if (g_lums_initialized) {
+        return 0; // Déjà initialisé
     }
-    result->lums = (LUM*)malloc(sizeof(LUM) * count);
-    if (!result->lums) {
-        free(result);
-        LOG_ERROR("Memory allocation failed for LUMs array of size %zu", count);
-        return NULL;
-    }
 
-    if (lums && count > 0) {
-        memcpy(result->lums, lums, sizeof(LUM) * count);
-    }
-    result->count = count;
-    result->group_type = type;
-    result->spatial_data = NULL; // Initialize spatial_data to NULL
+    // Initialisation des métriques
+    memset(&g_metrics, 0, sizeof(PerformanceMetrics));
 
-    return result;
+    // Initialisation du générateur aléatoire
+    srand((unsigned int)time(NULL));
+
+    g_lums_initialized = true;
+    return 0;
 }
 
-// Declaration of free_lum_group, assuming it's defined in lums.h or a related file
-void free_lum_group(LUMGroup* group) {
-    if (group) {
-        free(group->lums); // Free the array of LUMs
-        free(group->spatial_data); // Free spatial data if allocated
-        free(group);       // Free the LUMGroup structure itself
+void lums_cleanup(void) {
+    if (!g_lums_initialized) {
+        return;
     }
+
+    // Nettoyage des ressources globales
+    memset(&g_metrics, 0, sizeof(PerformanceMetrics));
+    g_lums_initialized = false;
 }
 
+// ============================================================================
+// GESTION DES GROUPES LUM
+// ============================================================================
 
-/**
- * VORAX Operation: Fusion (⧉)
- * Combines two LUM groups into one cluster
- */
-LUMGroup* lum_fusion(LUMGroup* group1, LUMGroup* group2) {
-    if (!group1 || !group2 || !group1->lums || !group2->lums) {
-        LOG_ERROR("Invalid input groups for lum_fusion");
+LUMGroup* lums_group_create(size_t initial_capacity) {
+    if (initial_capacity == 0) {
+        initial_capacity = 16; // Capacité par défaut
+    }
+
+    LUMGroup* group = malloc(sizeof(LUMGroup));
+    if (!group) {
         return NULL;
     }
 
-    size_t total_count = group1->count + group2->count;
-    LUM* fused_lums = (LUM*)malloc(sizeof(LUM) * total_count);
-    if (!fused_lums) {
-        LOG_ERROR("Memory allocation failed for fused LUMs array");
+    group->lums = malloc(sizeof(LUMStruct) * initial_capacity);
+    if (!group->lums) {
+        free(group);
         return NULL;
     }
 
-    // Copy first group
-    memcpy(fused_lums, group1->lums, sizeof(LUM) * group1->count);
+    group->count = 0;
+    group->capacity = initial_capacity;
+    group->total_conservation = 0.0;
+    group->group_id = (uint64_t)group; // ID basé sur l'adresse
 
-    // Copy second group
-    memcpy(fused_lums + group1->count, group2->lums, sizeof(LUM) * group2->count);
-
-    // Update positions for spatial representation
-    for (size_t i = group1->count; i < total_count; i++) {
-        // This adjustment might need more context. Assuming it's for visual separation.
-        fused_lums[i].position.x += group1->count * 20;
-        fused_lums[i].structure_type = LUM_GROUP; // Mark as part of fusion
-    }
-
-    LUMGroup* fused_group = create_lum_group(fused_lums, total_count, GROUP_CLUSTER);
-    if (!fused_group) {
-        free(fused_lums); // Clean up if create_lum_group fails
-        LOG_ERROR("Failed to create fused LUM group");
-        return NULL;
-    }
-    // The caller is responsible for freeing fused_lums if create_lum_group fails.
-    // However, if create_lum_group succeeds, it duplicates the data, so fused_lums should not be freed here.
-    // The created fused_group will manage its memory.
-
-    return fused_group;
+    return group;
 }
 
-/**
- * VORAX Operation: Split (⇅)
- * Distributes LUMs across multiple zones
- */
-LUMGroup** lum_split(LUMGroup* source, int zones, size_t* result_count) {
-    if (!source || !source->lums || zones <= 0 || !result_count) {
-        if (result_count) *result_count = 0;
-        LOG_ERROR("Invalid input for lum_split");
-        return NULL;
+void lums_group_destroy(LUMGroup* group) {
+    if (!group) {
+        return;
     }
 
-    LUMGroup** result = (LUMGroup**)malloc(sizeof(LUMGroup*) * zones);
-    if (!result) {
-        *result_count = 0;
-        LOG_ERROR("Memory allocation failed for split result array");
-        return NULL;
+    if (group->lums) {
+        free(group->lums);
     }
 
-    size_t lums_per_zone = source->count / zones;
-    size_t remainder = source->count % zones;
-    size_t current_index = 0;
-
-    for (int i = 0; i < zones; i++) {
-        size_t zone_count = lums_per_zone + ((size_t)i < remainder ? 1 : 0);
-
-        if (zone_count == 0) {
-            // Create empty zone
-            result[i] = create_lum_group(NULL, 0, GROUP_LINEAR);
-            if (!result[i]) {
-                LOG_ERROR("Failed to create empty LUM group for zone %d", i);
-                // Cleanup on failure: free already created groups and the result array
-                for (int j = 0; j < i; j++) {
-                    free_lum_group(result[j]);
-                }
-                free(result);
-                *result_count = 0;
-                return NULL;
-            }
-            continue;
-        }
-
-        LUM* zone_lums = (LUM*)malloc(sizeof(LUM) * zone_count);
-        if (!zone_lums) {
-            LOG_ERROR("Memory allocation failed for LUMs in zone %d", i);
-            // Cleanup on failure: free already created groups and the result array
-            for (int j = 0; j < i; j++) {
-                free_lum_group(result[j]);
-            }
-            free(result);
-            *result_count = 0;
-            return NULL;
-        }
-
-        memcpy(zone_lums, source->lums + current_index, sizeof(LUM) * zone_count);
-
-        // Update positions for new zone
-        for (size_t j = 0; j < zone_count; j++) {
-            zone_lums[j].position.x = (int)(j * 20); // Ensure cast to int if necessary
-            zone_lums[j].position.y = i * 50; // Different Y for each zone
-            zone_lums[j].structure_type = LUM_LINEAR;
-        }
-
-        result[i] = create_lum_group(zone_lums, zone_count, GROUP_LINEAR);
-        if (!result[i]) {
-            LOG_ERROR("Failed to create LUM group for zone %d", i);
-            // Cleanup on failure: free allocated zone_lums, then already created groups and the result array
-            free(zone_lums);
-            for (int j = 0; j < i; j++) {
-                free_lum_group(result[j]);
-            }
-            free(result);
-            *result_count = 0;
-            return NULL;
-        }
-        current_index += zone_count;
-    }
-
-    *result_count = zones;
-    return result;
+    memset(group, 0, sizeof(LUMGroup));
+    free(group);
 }
 
-/**
- * VORAX Operation: Cycle (⟲)
- * Reduces LUM count by modulo operation
- */
-LUMGroup* lum_cycle(LUMGroup* source, int modulo) {
-    if (!source || !source->lums || modulo <= 0) {
-        LOG_ERROR("Invalid input for lum_cycle");
-        return NULL;
+int lums_group_add(LUMGroup* group, LUM value, double presence) {
+    if (!group || presence < 0.0 || presence > 1.0) {
+        return -1;
     }
 
-    size_t result_count_raw = source->count % modulo;
-    size_t final_result_count;
-    LUM* cycled_lums = NULL;
-
-    if (result_count_raw == 0) {
-        // Create minimal LUM group with single presence if modulo results in zero items
-        final_result_count = 1;
-        cycled_lums = (LUM*)malloc(sizeof(LUM));
-        if (!cycled_lums) {
-            LOG_ERROR("Memory allocation failed for single LUM in lum_cycle");
-            return NULL;
+    // Redimensionnement si nécessaire
+    if (group->count >= group->capacity) {
+        size_t new_capacity = group->capacity * 2;
+        LUMStruct* new_lums = realloc(group->lums, sizeof(LUMStruct) * new_capacity);
+        if (!new_lums) {
+            return -1;
         }
-        cycled_lums[0].presence = 1; // Default presence, might need adjustment
-        cycled_lums[0].structure_type = LUM_CYCLE;
-        cycled_lums[0].spatial_data = NULL;
-        cycled_lums[0].position.x = 0;
-        cycled_lums[0].position.y = 0;
+        group->lums = new_lums;
+        group->capacity = new_capacity;
+    }
+
+    // Ajout du nouveau LUM
+    LUMStruct* lum = &group->lums[group->count];
+    lum->value = value;
+    lum->presence = presence;
+    lum->zone_id = 0; // Zone par défaut
+    // Using time(NULL) directly might not be granular enough for nanoseconds.
+    // A more precise timer would be needed for nanosecond accuracy.
+    // For demonstration, we'll use time as a placeholder.
+    lum->timestamp_ns = (uint64_t)time(NULL) * 1000000000ULL; 
+
+    // Mise à jour de la conservation
+    // __builtin_popcountll is a GCC/Clang extension. For portability, a manual count might be needed.
+    group->total_conservation += (double)__builtin_popcountll(value) * presence;
+    group->count++;
+
+    return 0;
+}
+
+bool lums_group_validate_conservation(const LUMGroup* group) {
+    if (!group) {
+        return false;
+    }
+
+    double calculated_conservation = 0.0;
+    for (size_t i = 0; i < group->count; i++) {
+        const LUMStruct* lum = &group->lums[i];
+        // Assuming __builtin_popcountll is available or a portable alternative is used.
+        calculated_conservation += (double)__builtin_popcountll(lum->value) * lum->presence;
+    }
+
+    double difference = fabs(calculated_conservation - group->total_conservation);
+    return difference < LUMS_CONSERVATION_THRESHOLD;
+}
+
+// ============================================================================
+// OPÉRATIONS LUMS FONDAMENTALES
+// ============================================================================
+
+int lums_compute_fusion_real(uint64_t lum_a, uint64_t lum_b, uint64_t* result) {
+    if (!result || !g_lums_initialized) {
+        return -1;
+    }
+
+    struct timespec start_time, end_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+
+    // Conservation avant fusion
+    uint32_t bits_before = __builtin_popcountll(lum_a);
+    uint32_t bits_b_before = __builtin_popcountll(lum_b);
+
+    // Opération de fusion (XOR conservatrice)
+    *result = lum_a ^ lum_b;
+
+    // Vérification conservation
+    uint32_t bits_after = __builtin_popcountll(*result);
+
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    uint64_t execution_time = (end_time.tv_sec - start_time.tv_sec) * 1000000000ULL +
+                             (end_time.tv_nsec - start_time.tv_nsec);
+
+    // Mise à jour des métriques
+    g_metrics.operations_count++;
+    g_metrics.total_time_ns += execution_time;
+
+    // Logging de l'opération
+    lums_log_operation(VORAX_OP_FUSION, lum_a, lum_b, *result, 
+                      (uint64_t)start_time.tv_sec * 1000000000ULL + start_time.tv_nsec);
+
+    // Validation conservation (XOR peut réduire le nombre de bits)
+    bool conservation_valid = (bits_after <= bits_before + bits_b_before); // Conservation means bits don't increase
+    lums_log_conservation((double)bits_before + bits_b_before, (double)bits_after, conservation_valid);
+
+    return conservation_valid ? 0 : -1;
+}
+
+int lums_compute_split_real(uint64_t lum_source, uint64_t* result_a, uint64_t* result_b) {
+    if (!result_a || !result_b || !g_lums_initialized) {
+        return -1;
+    }
+
+    struct timespec start_time, end_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+
+    // Conservation avant split
+    uint32_t bits_before = __builtin_popcountll(lum_source);
+
+    // Algorithme de split conservatif
+    // Distribution alternée des bits
+    uint64_t mask_a = 0x5555555555555555ULL; // Bits pairs
+    uint64_t mask_b = 0xAAAAAAAAAAAAAAAAULL; // Bits impairs
+
+    *result_a = lum_source & mask_a;
+    *result_b = lum_source & mask_b;
+
+    // Vérification conservation
+    uint32_t bits_after = __builtin_popcountll(*result_a) + __builtin_popcountll(*result_b);
+
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    uint64_t execution_time = (end_time.tv_sec - start_time.tv_sec) * 1000000000ULL +
+                             (end_time.tv_nsec - start_time.tv_nsec);
+
+    // Mise à jour des métriques
+    g_metrics.operations_count++;
+    g_metrics.total_time_ns += execution_time;
+
+    // Validation conservation parfaite pour split
+    bool conservation_valid = (bits_after == bits_before);
+    lums_log_conservation((double)bits_before, (double)bits_after, conservation_valid);
+
+    return conservation_valid ? 0 : -1;
+}
+
+int lums_compute_cycle_real(uint64_t lum_input, int modulo, uint64_t* result) {
+    if (!result || modulo <= 0 || !g_lums_initialized) {
+        return -1;
+    }
+
+    struct timespec start_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+
+    // Opération cyclique conservative
+    uint32_t shift_amount = modulo % 64;
+    *result = (lum_input << shift_amount) | (lum_input >> (64 - shift_amount));
+
+    // Mise à jour des métriques
+    g_metrics.operations_count++;
+
+    // Conservation parfaite pour rotation
+    lums_log_conservation((double)__builtin_popcountll(lum_input), 
+                         (double)__builtin_popcountll(*result), true);
+
+    return 0;
+}
+
+// ============================================================================
+// VALIDATION ET CONSERVATION
+// ============================================================================
+
+bool lums_validate_conservation_law(const LUMGroup* before, const LUMGroup* after) {
+    if (!before || !after) {
+        return false;
+    }
+
+    double conservation_before = before->total_conservation;
+    double conservation_after = after->total_conservation;
+
+    // Avoid division by zero if conservation_before is zero
+    if (conservation_before == 0.0) {
+        return conservation_after == 0.0; // If before is 0, after must also be 0 for conservation
+    }
+
+    double ratio = conservation_after / conservation_before;
+    return (ratio >= LUMS_CONSERVATION_THRESHOLD && ratio <= (1.0 / LUMS_CONSERVATION_THRESHOLD));
+}
+
+double lums_calculate_entropy(const LUMGroup* group) {
+    if (!group || group->count == 0) {
+        return 0.0;
+    }
+
+    double total_entropy = 0.0;
+    double total_presence = 0.0;
+
+    for (size_t i = 0; i < group->count; i++) {
+        const LUMStruct* lum = &group->lums[i];
+        // Assuming LUM value is intended to represent a probability or proportion.
+        // If LUM is just a bitmask, this calculation might not be meaningful.
+        // For demonstration, let's use a normalized value based on bits.
+        // A more appropriate value for entropy calculation would be needed.
+        double normalized_value = (double)__builtin_popcountll(lum->value) / 64.0; // Example: proportion of set bits
+
+        if (normalized_value > 0.0 && normalized_value < 1.0) {
+            total_entropy += -normalized_value * log2(normalized_value) * lum->presence;
+            total_entropy += -(1.0 - normalized_value) * log2(1.0 - normalized_value) * lum->presence;
+        } else if (normalized_value == 0.0 || normalized_value == 1.0) {
+            // Entropy is 0 if probability is 0 or 1, no need to add.
+        }
+
+        total_presence += lum->presence;
+    }
+
+    return total_presence > 0.0 ? total_entropy / total_presence : 0.0;
+}
+
+PerformanceMetrics lums_get_performance_metrics(void) {
+    // Calcul des moyennes
+    if (g_metrics.operations_count > 0) {
+        g_metrics.average_time_ns = g_metrics.total_time_ns / (double)g_metrics.operations_count;
     } else {
-        final_result_count = result_count_raw;
-        cycled_lums = (LUM*)malloc(sizeof(LUM) * final_result_count);
-        if (!cycled_lums) {
-            LOG_ERROR("Memory allocation failed for %zu LUMs in lum_cycle", final_result_count);
-            return NULL;
-        }
-        memcpy(cycled_lums, source->lums, sizeof(LUM) * final_result_count);
-
-        // Mark as cycle type and arrange in circular pattern
-        double angle_step = 2.0 * 3.14159265359 / final_result_count;
-        for (size_t i = 0; i < final_result_count; i++) {
-            cycled_lums[i].structure_type = LUM_CYCLE;
-            // Arrange in circle
-            cycled_lums[i].position.x = (int)(50 + 30 * cos(i * angle_step));
-            cycled_lums[i].position.y = (int)(50 + 30 * sin(i * angle_step));
-        }
+        g_metrics.average_time_ns = 0.0;
     }
 
-    return create_lum_group(cycled_lums, final_result_count, GROUP_NODE);
+    return g_metrics;
 }
 
-/**
- * VORAX Operation: Flow (→)
- * Transfers LUMs to target zone (conceptual)
- */
-LUMGroup* lum_flow(LUMGroup* source, const char* target_zone) {
-    if (!source || !source->lums || !target_zone) {
-        LOG_ERROR("Invalid input for lum_flow");
+// ============================================================================
+// UTILITAIRES DE CONVERSION
+// ============================================================================
+
+char* lums_to_binary_string(LUM value) {
+    char* binary_str = malloc(65); // 64 bits + '\0'
+    if (!binary_str) {
         return NULL;
     }
 
-    // Create a copy with flow metadata
-    LUM* flowed_lums = (LUM*)malloc(sizeof(LUM) * source->count);
-    if (!flowed_lums) {
-        LOG_ERROR("Memory allocation failed for flowed LUMs array");
-        return NULL;
+    for (int i = 63; i >= 0; i--) {
+        binary_str[63 - i] = ((value >> i) & 1) ? '1' : '0';
     }
+    binary_str[64] = '\0';
 
-    memcpy(flowed_lums, source->lums, sizeof(LUM) * source->count);
-
-    // Update positions to show flow direction
-    for (size_t i = 0; i < source->count; i++) {
-        flowed_lums[i].position.x += 100; // Offset to show movement
-        flowed_lums[i].structure_type = LUM_LINEAR; // Reset to linear for flow
-    }
-
-    LUMGroup* result = create_lum_group(flowed_lums, source->count, source->group_type);
-    if (!result) {
-        LOG_ERROR("Failed to create LUM group for flow operation");
-        // The caller is responsible for freeing flowed_lums if create_lum_group fails.
-        // However, if create_lum_group succeeds, it duplicates the data, so flowed_lums should not be freed here.
-        return NULL;
-    }
-
-    // Store target zone information
-    size_t target_len = strlen(target_zone);
-    // Use a temporary pointer for allocation to check for success
-    char* temp_spatial_data = (char*)malloc(target_len + 1);
-    if (temp_spatial_data) {
-        strcpy(temp_spatial_data, target_zone);
-        result->spatial_data = temp_spatial_data; // Assign only if allocation and copy succeed
-    } else {
-        LOG_ERROR("Memory allocation failed for spatial_data in lum_flow");
-        // It might be better to free the created group if spatial data is critical
-        // free_lum_group(result); // Optional: depending on requirements
-        // return NULL;
-    }
-
-
-    return result;
+    return binary_str;
 }
 
-/**
- * Advanced Operation: Organic Fusion
- * Fuses groups while preserving spatial relationships
- */
-LUMGroup* lum_organic_fusion(LUMGroup** groups, size_t group_count) {
-    if (!groups || group_count == 0) {
-        LOG_ERROR("Invalid input for lum_organic_fusion");
-        return NULL;
+LUM lums_from_binary_string(const char* binary_str) {
+    if (!binary_str) {
+        return 0;
     }
 
-    size_t total_count = 0;
-    for (size_t i = 0; i < group_count; i++) {
-        if (groups[i] && groups[i]->lums) {
-            total_count += groups[i]->count;
+    LUM value = 0;
+    size_t len = strlen(binary_str);
+
+    for (size_t i = 0; i < len && i < 64; i++) {
+        if (binary_str[i] == '1') {
+            value |= (1ULL << (len - 1 - i));
+        } else if (binary_str[i] != '0') {
+            // Handle invalid characters if necessary, here we ignore them
         }
     }
 
-    if (total_count == 0) {
-        LOG_ERROR("No LUMs found in any of the provided groups for organic fusion");
-        return NULL;
-    }
-
-    LUM* fused_lums = (LUM*)malloc(sizeof(LUM) * total_count);
-    if (!fused_lums) {
-        LOG_ERROR("Memory allocation failed for fused LUMs in organic fusion");
-        return NULL;
-    }
-
-    size_t current_pos = 0;
-    int spiral_radius = 0;
-    double angle = 0;
-    const double PI = 3.14159265359;
-    const double angle_increment = 0.5;
-    const int radius_increment = 10;
-
-    for (size_t i = 0; i < group_count; i++) {
-        if (!groups[i] || !groups[i]->lums) continue;
-
-        for (size_t j = 0; j < groups[i]->count; j++) {
-            // Copy LUM data
-            fused_lums[current_pos] = groups[i]->lums[j];
-
-            // Arrange in spiral pattern
-            fused_lums[current_pos].position.x = (int)(spiral_radius * cos(angle));
-            fused_lums[current_pos].position.y = (int)(spiral_radius * sin(angle));
-            fused_lums[current_pos].structure_type = LUM_GROUP; // Mark as part of fusion
-
-            // Update spiral parameters
-            angle += angle_increment;
-            if (angle > 2 * PI) {
-                angle = fmod(angle, 2 * PI); // Keep angle within [0, 2*PI)
-                spiral_radius += radius_increment;
-            }
-
-            current_pos++;
-        }
-    }
-
-    LUMGroup* fused_group = create_lum_group(fused_lums, total_count, GROUP_CLUSTER);
-    if (!fused_group) {
-        free(fused_lums); // Clean up if create_lum_group fails
-        LOG_ERROR("Failed to create fused LUM group in organic fusion");
-        return NULL;
-    }
-    return fused_group;
+    return value;
 }
 
-/**
- * Advanced Operation: Contextual Split
- * Splits based on LUM properties rather than equal distribution
- */
-LUMGroup** lum_contextual_split(LUMGroup* source, size_t* result_count) {
-    if (!source || !source->lums || !result_count) {
-        if (result_count) *result_count = 0;
-        LOG_ERROR("Invalid input for lum_contextual_split");
-        return NULL;
-    }
-
-    // Count different structure types
-    // Assuming LumStructureType is an enum: LUM_NODE, LUM_LINEAR, LUM_GROUP, LUM_CYCLE
-    // And these map to indices 0, 1, 2, 3 respectively.
-    size_t type_counts[4] = {0};
-    for (size_t i = 0; i < source->count; i++) {
-        // Ensure the structure_type is within the bounds of our array
-        if (source->lums[i].structure_type < 4) {
-            type_counts[source->lums[i].structure_type]++;
-        } else {
-            LOG_ERROR("Encountered unexpected structure_type %d", source->lums[i].structure_type);
-            // Potentially treat as an error or assign to a default category
-        }
-    }
-
-    // Count non-empty types to determine the size of the result array
-    size_t active_types = 0;
-    for (int i = 0; i < 4; i++) {
-        if (type_counts[i] > 0) active_types++;
-    }
-
-    if (active_types == 0) {
-        *result_count = 0;
-        LOG_ERROR("No LUMs with known structure types found for contextual split");
-        return NULL;
-    }
-
-    LUMGroup** result = (LUMGroup**)malloc(sizeof(LUMGroup*) * active_types);
-    if (!result) {
-        *result_count = 0;
-        LOG_ERROR("Memory allocation failed for result array in contextual split");
-        return NULL;
-    }
-
-    size_t group_index = 0;
-    for (int type = 0; type < 4; type++) {
-        if (type_counts[type] == 0) continue; // Skip types with no LUMs
-
-        // Allocate memory for LUMs of the current type
-        LUM* type_lums = (LUM*)malloc(sizeof(LUM) * type_counts[type]);
-        if (!type_lums) {
-            LOG_ERROR("Memory allocation failed for LUMs of type %d in contextual split", type);
-            // Cleanup on failure: free allocated memory for LUMs and previously created groups
-            for (size_t i = 0; i < group_index; i++) {
-                free_lum_group(result[i]);
-            }
-            free(result);
-            *result_count = 0;
-            return NULL;
-        }
-
-        size_t type_index = 0;
-        // Populate the type_lums array with LUMs of the current type
-        for (size_t i = 0; i < source->count; i++) {
-            if (source->lums[i].structure_type == (LumStructureType)type) {
-                type_lums[type_index] = source->lums[i];
-                // Adjust positions based on type and index within the type
-                type_lums[type_index].position.x = (int)(type_index * 20);
-                type_lums[type_index].position.y = type * 40; // Different Y for each type
-                type_index++;
-            }
-        }
-
-        // Determine the group type based on the LUM structure type
-        GroupType group_type;
-        if (type == LUM_GROUP) { // Assuming LUM_GROUP is mapped to index 2
-            group_type = GROUP_CLUSTER;
-        } else {
-            group_type = GROUP_LINEAR;
-        }
-
-        result[group_index] = create_lum_group(type_lums, type_counts[type], group_type);
-        if (!result[group_index]) {
-            LOG_ERROR("Failed to create LUM group for type %d in contextual split", type);
-            // Cleanup on failure: free allocated memory for LUMs, then previously created groups and the result array
-            free(type_lums);
-            for (size_t i = 0; i < group_index; i++) {
-                free_lum_group(result[i]);
-            }
-            free(result);
-            *result_count = 0;
-            return NULL;
-        }
-        group_index++;
-    }
-
-    *result_count = active_types;
-    return result;
+uint32_t lums_count_active_bits(LUM value) {
+    // Assuming __builtin_popcountll is available.
+    return (uint32_t)__builtin_popcountll(value);
 }
 
-/**
- * Free split result array
- */
-void free_split_result(LUMGroup** groups, size_t count) {
-    if (groups) {
-        for (size_t i = 0; i < count; i++) {
-            free_lum_group(groups[i]);
-        }
-        free(groups);
-    }
+// ============================================================================
+// LOGGING SCIENTIFIQUE (STUBS POUR LIAISON AVEC scientific_logger.c)
+// ============================================================================
+
+void lums_log_operation(VoraxOperationType type, uint64_t input_a, uint64_t input_b, 
+                       uint64_t result, uint64_t timestamp_ns) {
+    // Stub implementation: In a real scenario, this would call a logging function
+    // from a scientific logger module.
+    (void)type; (void)input_a; (void)input_b; (void)result; (void)timestamp_ns;
+    // Example: printf("LOG: Operation %d, Inputs: %llu, %llu, Result: %llu, Time: %lluns\n",
+    //                   type, input_a, input_b, result, timestamp_ns);
+}
+
+void lums_log_conservation(double before, double after, bool valid) {
+    // Stub implementation: In a real scenario, this would call a logging function
+    // from a scientific logger module.
+    (void)before; (void)after; (void)valid;
+    // Example: printf("LOG: Conservation Check: Before=%.2f, After=%.2f, Valid=%s\n",
+    //                   before, after, valid ? "true" : "false");
 }

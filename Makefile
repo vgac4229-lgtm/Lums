@@ -3,7 +3,8 @@
 
 # Configuration de base
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare
+CFLAGS = -Wall -Wextra -std=c99 -pedantic -fPIC -Wno-multichar -Wsign-compare -mavx2 -mfma $(shell pkg-config --cflags openssl)
+LDFLAGS = $(shell pkg-config --libs openssl)
 SRCDIR = server/lums
 BUILDDIR = build
 TESTDIR = tests
@@ -15,9 +16,9 @@ LIBRARY = $(BUILDDIR)/liblums.a
 
 # Déclaration des objets LUMS pour la librairie
 LUMS_OBJECTS = build/server/lums/decoder.o build/server/lums/encoder.o build/server/lums/operations.o \
-               build/server/lums/vorax.o build/server/lums/lums_backend.o build/server/lums/electromechanical.o \
-               build/server/lums/electromechanical_impl.o build/server/lums/advanced-math.o build/server/lums/lumgroup.o \
-               build/server/lums/jit_compiler.o build/server/lums/vorax_simple.o build/server/lums/scientific_logger.o
+	       build/server/lums/vorax.o build/server/lums/lums_backend.o build/server/lums/advanced-math.o build/server/lums/lumgroup.o \
+	       build/server/lums/jit_compiler.o build/server/lums/vorax_simple.o build/server/lums/scientific_logger.o \
+	       build/server/lums/real_hardware.o build/server/lums/crypto_real.o build/server/lums/scientific_validation.o
 
 # Configuration debug
 DEBUG_FLAGS = -g3 -DDEBUG -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
@@ -65,10 +66,7 @@ build/server/lums/vorax.o: server/lums/vorax.c
 	$(CC) $(CFLAGS) -c $< -o $@
 build/server/lums/lums_backend.o: server/lums/lums_backend.c
 	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/electromechanical.o: server/lums/electromechanical.c
-	$(CC) $(CFLAGS) -c $< -o $@
-build/server/lums/electromechanical_impl.o: server/lums/electromechanical_impl.c
-	$(CC) $(CFLAGS) -c $< -o $@
+# Modules électromécaniques supprimés - utilisation hardware réel uniquement
 build/server/lums/advanced-math.o: server/lums/advanced-math.c
 	$(CC) $(CFLAGS) -c $< -o $@
 build/server/lums/lumgroup.o: server/lums/lumgroup.c
@@ -80,6 +78,9 @@ build/server/lums/vorax_simple.o: server/lums/vorax_simple.c
 build/server/lums/scientific_logger.o: server/lums/scientific_logger.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+build/server/lums/crypto_real.o: server/lums/crypto_real.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # Compilation objets pour les tests
 $(BUILDDIR)/%.o: %.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -87,6 +88,12 @@ $(BUILDDIR)/%.o: %.c | $(BUILDDIR)
 # Création librairie
 $(LIBRARY): $(LUMS_OBJECTS)
 	ar rcs $@ $^
+
+build/server/lums/real_hardware.o: server/lums/real_hardware.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/server/lums/scientific_validation.o: server/lums/scientific_validation.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Exécutable test principal
 $(BUILDDIR)/lums_test: $(BUILDDIR)/$(SRCDIR)/main_test.o $(LIBRARY)
@@ -242,9 +249,9 @@ security-check:
 lint-c:
 	@echo "Vérification style C..."
 	@if command -v cppcheck >/dev/null 2>&1; then \
-		cppcheck --enable=all --std=c99 $(SRCDIR)/ 2>&1 | tee logs/validation/lint_$(shell date +%Y%m%d_%H%M%S).log; \
+	        cppcheck --enable=all --std=c99 $(SRCDIR)/ 2>&1 | tee logs/validation/lint_$(shell date +%Y%m%d_%H%M%S).log; \
 	else \
-		echo "cppcheck non disponible - vérification manuelle"; \
+	        echo "cppcheck non disponible - vérification manuelle"; \
 	fi
 
 # CI/CD pipeline complet

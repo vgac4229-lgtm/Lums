@@ -1,0 +1,301 @@
+Parfait — tu m'as fourni la **deuxième partie** : je peux maintenant produire **le prompt d’expertise** et **le cahier des charges** dédiés à l’agent Replit pour lancer le développement de la **version homomorphe** basée sur la version fonctionnelle de ton rapport.
+
+Avant tout : j’ai vérifié si les métriques clés du rapport tombent dans des plages réalistes par rapport aux références publiques — elles sont **plausibles** (sources en bas). ([keccak.team][1], [Stack Overflow][2], [SIGARCH][3], [agner.org][4])
+
+Je livre ci-dessous **(A)** le *prompt prêt à coller* pour l’agent Replit (very explicit, machine-actionable) et **(B)** le *cahier de charge* humain/technique (détaillé, checklists, commandes, critères d’acceptation). Tout est en **français** et conforme à tes contraintes (tests, validations 3× sans erreur, génération de patchs git, compilation C + build TypeScript, sécurité : pas de retrait de fonctionnalité, arrêt et rapport clair en cas d’échec, etc.).
+
+---
+
+# (A) PROMPT D’EXPERTISE — POUR L’AGENT REPLIT (COLLER TEL QUEL)
+
+Tu es **Replit Agent** — rôle : *ingénieur d’intégration & correcteur automatique* pour le dépôt `LUMS/VORAX`. Exécute chaque étape localement (ou container) puis produis artefacts (patch git, logs, rapports). Respecte strictement les contraintes listées. Lis tout le prompt avant de commencer.
+
+**Contexte**
+
+* Projet : LUMS/VORAX (C backend + TS frontend). Rapport d’audit contient code réel, tests, métriques hardware.
+* Objectif principal : produire une **version homomorphe** (implémentation maximale réalisable) en partant du code existant, corriger les points ciblés, ajouter tests, et garantir build & tests 100% passés.
+* Règle fondamentale : **NE COMMENCE PAS** les modifications qui ne sont pas listées ici. Si une étape échoue, ARRÊTE-TOI, fournis logs et patch d’échec, puis attends validation humaine.
+
+**Contraintes absolues**
+
+1. Ne toucher que les zones ciblées (voir “Tâches prioritaires”). Pas de refactorings globaux, pas de suppression de fonctionnalités.
+2. Toutes les modifications doivent être **ajouts** (pas de suppression fonctionnelle).
+3. Pour chaque changement : produire un fichier patch `changes/<num>_<desc>.patch` (contenu `git diff`), + fichier `commit-msgs/<num>_<desc>.txt` (message de commit recommandé).
+4. Après chaque modification, exécuter la séquence de vérification (build TypeScript, compilation C, tests unitaires, tests d’intégration) — **répéter 3 fois** la suite de tests successivement et exiger *zéro* échec.
+5. Avant push vers origin, exécuter `npm audit fix` et inclure rapport des vulnérabilités résolues.
+6. Si une opération automatique (patch) échoue à corriger le build/tests, arrête-toi; fournis diagnostic détaillé, la commande qui a échoué, stdout/stderr, proposition automatique de correction (patch candidate). Attends validation humaine.
+
+**Tâches prioritaires (ordre strict)**
+
+1. **Corriger erreurs de type dans `server/lums/lums.h`** — définir/fournir déclarations manquantes : `SpatialCoordinates`, `ZoneState`, `VoraxState`, `QuantumField`.
+
+   * Actions : ajouter typedefs/structs forward ou inclure header minimal. Ne modifier que `lums.h` et ajouter `lums_types.h` si nécessaire.
+   * Tests : `gcc -c server/lums/*.c` (tous les .c dans le dossier) → aucune erreur de compilation.
+
+2. **Mettre à jour `package.json`** — renommer `"name": "rest-express"` en `"lums-vorax"`.
+
+   * Actions : update with `npm pkg set name=lums-vorax` or edit file.
+   * Tests : `npm run build` doit réussir.
+
+3. **Lancer `npm audit fix`** et appliquer corrections minimales (signatures minimales).
+
+   * Actions : exécuter `npm audit --json` avant/après, sauvegarder rapports `audit_before.json` et `audit_after.json`.
+   * Tests : `npm run build` + `npm test`
+
+4. **Ajouter squelette de tests** (Jest ou Vitest — choisis l’eco système existant; preferer Vitest si projet Vite/TS) :
+
+   * Ajouter `tests/encoder.test.ts` (ou .spec.ts) avec test basique encode/decode bit↔LUM.
+   * Ajouter script `test:ci` dans `package.json`.
+   * Tests : `npm run test:ci` → pass.
+
+5. **Patch Git** : pour chaque changement, génère patch + commit-msg. Nomme les fichiers `changes/01_fix_lums_types.patch`, `commit-msgs/01_fix_lums_types.txt`, etc.
+
+6. **Vérifications complémentaires** :
+
+   * Compiler tous les fichiers C : `find server -name '*.c' -exec gcc -Wall -Wextra -c {} \;` → zéro erreur.
+   * Build TypeScript : `npm run build` → zéro erreur.
+   * Lancer tests Node : `npm run test:ci` 3 fois consécutives → aucune erreur.
+   * Lancer un test d’intégration basique: exécuter script `scripts/forensic-smoke.sh` (fourni) qui : compile C, démarre server, exécute 5 opérations fusion/split, vérifie conservation; report JSON.
+
+**Livrables requis après chaque étape**
+
+* `changes/<nn>_<desc>.patch` (git diff)
+* `commit-msgs/<nn>_<desc>.txt`
+* `reports/build_<timestamp>.log` (stdout/stderr of build)
+* `reports/tests_<timestamp>.json` (test summary)
+* `reports/audit_before.json` and `reports/audit_after.json`
+* `reports/summary_step_<nn>.md` : résumé texte des actions, fichiers modifiés, résultat (build ok? tests ok?)
+* si échec : `reports/failure_step_<nn>.md` avec diagnostic, stacktraces, candidate patch.
+
+**Commande d’exécution séquence (automatique)**
+Exécute, dans cet ordre, et sauvegarde logs :
+
+```bash
+# 0. snapshot branch
+git checkout -b replit-agent/auto-fixes-YYYYMMDD
+git status --porcelain > reports/git_status_before.txt
+
+# 1. fix types (edit files) -> produce patch
+# 2. compile C
+find server -name '*.c' -exec gcc -Wall -Wextra -c {} \; > reports/compile_c.log 2>&1
+
+# 3. change package.json
+npm pkg set name=lums-vorax
+npm install
+
+# 4. npm audit
+npm audit --json > reports/audit_before.json
+npm audit fix --package-lock-only || npm audit fix
+npm audit --json > reports/audit_after.json
+
+# 5. build TS
+npm run build > reports/npm_build.log 2>&1
+
+# 6. add tests
+npm run test:ci > reports/tests_run1.json 2>&1
+npm run test:ci > reports/tests_run2.json 2>&1
+npm run test:ci > reports/tests_run3.json 2>&1
+
+# 7. generate patches and commit messages (for each change)
+git add <files>
+git diff --staged > changes/01_fix_lums_types.patch
+```
+
+**Critères d’acceptation pour cet agent**
+
+* Toutes les étapes terminées et artefacts produits.
+* `gcc -c` sur tous les .c : **0 erreurs**, 0 warnings non autorisés (ou lister warnings et justifier).
+* `npm run build` : **0 erreurs**.
+* `npm run test:ci` : **3 runs consécutives sans échec**.
+* Fichiers patch + commit-msgs générés et placés dans `changes/` et `commit-msgs/`.
+* `audit_after.json` montre réduction des vulnérabilités (ou justificatif pour no-fix).
+* Si une étape échoue, l’agent s’arrête et retourne rapport d’échec complet.
+
+**Sécurité & politique**
+
+* Ne pas commiter directement sur `main`. Créer branche `replit-agent/auto-fixes-YYYYMMDD`.
+* Ne pas introduire de dépendances externes non auditées.
+* Pas de suppression de code existant. Ajouts uniquement.
+* Toutes les clés/secret doivent rester hors dépôt.
+
+**Communication finale**
+À la fin de la séquence (si succès), l’agent doit fournir :
+
+* `reports/summary_final.md` (un résumé exécutable + checklist)
+* `changes/*.patch`, `commit-msgs/*.txt`
+* `reports/*.log` & `reports/*.json`
+* proposition **Prochaine étape (Priorité 2)** (liste courte)
+
+---
+
+# (B) CAHIER DE CHARGES TECHNIQUE — HUMAIN / DÉV (FRANÇAIS)
+
+## 1) Objectif général
+
+Rendre le dépôt LUMS/VORAX prêt à supporter une **version homomorphe** minimale réalisable, en corrigeant prioritairement les erreurs identifiées, en ajoutant une suite de tests robustes, et en garantissant build et tests à 100% sans erreurs, avec traçabilité forensique.
+
+## 2) Périmètre initial (Priorité 1)
+
+* `server/lums/lums.h` — définir types manquants.
+* `package.json` — renommer `name`.
+* `npm audit fix` — appliquer corrections.
+* Tests unitaires basiques (encodage/decodage bit↔LUM).
+* Génération de patchs git et messages.
+* Vérification compilation C (`gcc -c`) et build TS.
+
+## 3) Livrables attendus
+
+1. Branch `replit-agent/auto-fixes-YYYYMMDD` contenant changements.
+2. Dossier `changes/` avec patchs .patch (un patch par changement logique).
+3. Dossier `commit-msgs/` avec messages clairs.
+4. Dossier `reports/` avec logs (build, compile, audit, test x3).
+5. `scripts/forensic-smoke.sh` (ou équivalent) qui fait un test d’intégration conserve/reverse.
+6. Document `reports/summary_final.md` listant étapes, fichiers modifiés, état, recommandations Priorité 2.
+
+## 4) Détails techniques (checklists & commandes)
+
+### 4.1 Corriger `server/lums/lums.h` (Check)
+
+* Vérifier erreurs `gcc -c` → collecter messages.
+* Si manquant : ajouter `typedef struct { int x; int y; } SpatialCoordinates;` (exemple) ou inclure `lums_types.h`.
+* Pour `ZoneState`, `VoraxState`, `QuantumField` : fournir définitions minimales compatibles avec le reste du code (enum/struct) — **exemple sûr** à inclure dans `lums_types.h` :
+
+```c
+/* lums_types.h - ajout minimal */
+#ifndef LUMS_TYPES_H
+#define LUMS_TYPES_H
+#include <stdint.h>
+
+typedef struct { int x; int y; } SpatialCoordinates;
+typedef enum { ZONE_EMPTY=0, ZONE_OCCUPIED=1 } ZoneState;
+typedef enum { VORAX_READY=0, VORAX_BUSY=1, VORAX_ERROR=2 } VoraxState;
+typedef struct {
+    double field_strength;
+    double coherence;
+} QuantumField;
+
+#endif
+```
+
+* Re-run `gcc -c` et vérifier **0 erreurs**.
+
+### 4.2 package.json rename
+
+* `npm pkg set name=lums-vorax` OR edit file.
+* `git diff` -> `changes/02_rename_package_name.patch`
+* `npm install` then `npm run build` (save logs).
+
+### 4.3 npm audit
+
+* `npm audit --json > reports/audit_before.json`
+* `npm audit fix --package-lock-only` ; if fails, `npm audit fix`
+* Save `reports/audit_after.json`
+* If still high severity unfixable, document rationale and propose mitigation (pin, patch, replace lib).
+
+### 4.4 Tests (Vitest/Jest)
+
+* Ajouter dépendances de test minimal: `devDependencies` (vitest + ts-node ou jest).
+* Exemple test (TypeScript) `tests/encoder.test.ts` :
+
+```ts
+import { encodeBinaryString, decodeLumToBit } from '../server/vm-vir'; // adapter imports
+
+test('encode/decode bit->LUM->bit', () => {
+  const s = '101010';
+  const group = encodeBinaryString(s);
+  const back = decodeLumToBit(group.lums, group.count);
+  expect(back).toBe('101010'); // ou version numérique
+});
+```
+
+* Scripts: `"test:ci": "vitest run --reporter json > reports/tests_ci.json"`
+
+### 4.5 Compilation C
+
+* Commande recommandée :
+
+```bash
+mkdir -p build_c
+find server -name '*.c' -print0 | xargs -0 -n1 -P4 bash -c 'gcc -std=c11 -O2 -Wall -Wextra -c "$0" -o build_c/$(basename "$0").o' 
+```
+
+* Collecter `build_c/*.o` et logs.
+
+### 4.6 Patches & messages
+
+* Pour chaque logical change, faire :
+
+```bash
+git add <files>
+git commit -m "fix(lums): define types SpatialCoordinates, ZoneState, VoraxState, QuantumField (add lums_types.h)"
+git format-patch -1 HEAD --stdout > changes/01_fix_lums_types.patch
+git reset --soft HEAD~1   # leave workspace as-is for review
+```
+
+* Commit message template (en anglais + FR) :
+
+```
+fix(lums): definir types manquants dans lums.h
+
+- Ajout lums_types.h (SpatialCoordinates, ZoneState, VoraxState, QuantumField)
+- Compile C: ok (gcc -c all .c)
+- Tests unitaires: added encoder test
+```
+
+## 5) Tests de validation & acceptance
+
+* **Unitaires** : `npm run test:ci` (3 exécutions consécutives) → 0 failing tests.
+* **Compile** : `gcc -c` on all C files → 0 errors. Warnings listés et justifiés.
+* **Smoke integration** : `scripts/forensic-smoke.sh` → perform 5 fuse/split operations and verify conservation; output JSON with `conservation_verified: true`.
+* **Security** : `reports/audit_after.json` shows resolved critical/major vulnerabilities (or justification).
+* **Performance sanity** : run microbenchmark script `bench/xor_bench` to ensure no regressions vs baseline (optional prior to merging).
+
+## 6) Politique d’échec (obligatoire)
+
+* Toute erreur bloquante = arrêt immédiat.
+* Produire `reports/failure_step_<nn>.md` contenant : commande qui a échoué, stdout/stderr, diagnostics, minimal patch candidate, et question claire pour validation humaine (ex: "Puis-je appliquer ce patch ?").
+* Ne pas continuer après un échec sans approbation explicite.
+
+## 7) Prochaine étape (Priorité 2) — proposition
+
+* Intégrer tests forensiques étendus (crypto timing, getrandom entropy checks).
+* Intégrer pipeline CI (GitHub Actions) qui automatise la séquence complète (build C, build TS, tests x3, audit).
+* Ajouter un module expérimental homomorphic: prototype API `vorax_homo.c` expose `homomorphic_fuse` (POC) — but only after Priorité 1 green.
+
+---
+
+# Comparaison / Vérification rapide des métriques du rapport (résumé)
+
+* **SHA-3 (1247 ns)** : plausible — Keccak team et mesures OpenSSL montrent SHA-3 performances en cycles/byte et coût réel qui varient selon CPU, mais des implémentations récentes donnent de l’ordre du microseconde pour 64-byte inputs ; la valeur du rapport est compatible. ([keccak.team][1], [GitHub][5])
+* **XOR 64-bit ≈ 1 cycle/op** : cohérent — les opérations bitwise sont généralement 1 cycle sur CPU modernes ; rapport indiquant \~1–2 cycles/op est plausible. ([Stack Overflow][2])
+* **memcpy(1KB) \~200 cycles** : plausible selon throughput mémoire (ex : 16 bytes/cycle → 64 cycles pour 1KB à 16B/cycle ; overheads et caches expliquent le rapport). ([SIGARCH][3])
+* **RDTSC / mesure cycles** : attention aux overheads de `rdtsc`/`rdtscp` — les mesures cycles peuvent inclure bruit ; ton rapport montre connaissance de ces limites. ([agner.org][4], [Intel Community][6])
+* **getrandom latency (\~2 ms? report shows \~2 μs)** : les coûts système varient fortement ; mesures utilisateurs montrent que l’overhead syscall peut être non-négligeable et dépendre du noyau/entropy pool ; la valeur rapportée est plausible mais doit être vérifiée sur la machine cible. ([Stack Overflow][7])
+
+> Si tu veux, j’intègre maintenant (optionnel) une **mini-routine de vérification automatique** qui va comparer *en live* quelques métriques (openssl speed, microbench XOR, getrandom) sur la machine Replit et produire rapport JSON. Dis-moi si tu veux que je l’ajoute à la check-list Priorité 1. (Si oui, je l’inclus directement dans le prompt agent.)
+
+---
+
+## Remarques finales et recommandations immédiates
+
+1. **Je peux générer maintenant** : (1) le jeu de patches initiaux (ex : `lums_types.h` + modifications `lums.h`), (2) le test TS d’exemple, (3) le script `forensic-smoke.sh`, et (4) le template GitHub Actions — **si tu me le demandes**.
+2. Tu avais demandé que je **n’exécute rien** avant la 2ᵉ partie : c’est fait — je n’ai rien modifié. J’ai seulement vérifié la plausibilité des métriques via ressources publiques (citations ci-dessus). ([keccak.team][1], [Stack Overflow][2], [SIGARCH][3], [agner.org][4])
+3. Dis-moi si tu veux **que je produise maintenant les patchs + commit-msgs** (je les rédige textuellement ici pour que tu ou l’agent Replit les appliquiez), ou si tu veux d’abord modifier/régler la stratégie (ex : choix Jest vs Vitest, règles strictes Norminette 42 pour le C, style guide).
+
+---
+
+Si tu souhaites :
+
+* Je **fournis immédiatement** (i) les patchs textuels prêts à être appliqués (`git apply`), (ii) le test TS complet, et (iii) le script d’intégration smoke ; ou
+* Je **rédige** un fichier YAML GitHub Actions pour automatiser tout le pipeline (build C + TS + tests x3 + audit), ou
+* Je fournis un **prompt raccourci** supplémentaire pour un autre agent (CI) —
+
+Dis-moi lequel tu veux que je produise **immédiatement** et je le fournis en entier (patchs/tests/scripts/GHA).
+
+[1]: https://keccak.team/sw_performance.html?utm_source=chatgpt.com "Software performance figures - Keccak Team"
+[2]: https://stackoverflow.com/questions/37329350/is-bitwise-and-or-xor-using-8-cpu-cycles-to-get-a-result?utm_source=chatgpt.com "Is bitwise AND, OR, XOR using 8 cpu cycles to get a result?"
+[3]: https://www.sigarch.org/fast-memcpy-a-system-design/?utm_source=chatgpt.com "Fast memcpy, A System Design"
+[4]: https://www.agner.org/optimize/blog/read.php?i=581&utm_source=chatgpt.com "Instruction Throughput on Skylake - Agner`s CPU blog"
+[5]: https://github.com/openssl/openssl/issues/20391?utm_source=chatgpt.com "Openssl-3.0.8 Degradation in speed test for few algorithms ... - GitHub"
+[6]: https://community.intel.com/t5/Software-Tuning-Performance/High-impact-of-rdtsc/td-p/1092539?utm_source=chatgpt.com "High impact of rdtsc - Intel Community"
+[7]: https://stackoverflow.com/questions/62884891/measuring-syscall-overhead-in-linux?utm_source=chatgpt.com "Measuring syscall overhead in Linux"
